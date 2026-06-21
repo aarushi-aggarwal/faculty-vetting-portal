@@ -4,12 +4,14 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get("portal_token")?.value
   const { pathname } = request.nextUrl
 
-  if (!token && pathname !== "/login") {
+  const publicPaths = ["/login", "/signup"]
+
+  if (!token && !publicPaths.includes(pathname)) {
     const loginUrl = new URL("/login", request.url)
     return NextResponse.redirect(loginUrl)
   }
 
-  if (token && pathname === "/login") {
+  if (token && publicPaths.includes(pathname)) {
     const homeUrl = new URL("/", request.url)
     return NextResponse.redirect(homeUrl)
   }

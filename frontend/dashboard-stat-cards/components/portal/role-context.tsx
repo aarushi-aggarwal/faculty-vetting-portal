@@ -7,11 +7,21 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1
 
 export interface ActiveUser {
   name: string
+  email: string
   roles: RoleKey[]
   department: string
+  bandwidthUsed: number
+  bandwidthMax: number
 }
 
-const defaultUser: ActiveUser = { name: "Loading…", roles: ["teacher"], department: "" }
+const defaultUser: ActiveUser = {
+  name: "Loading…",
+  email: "",
+  roles: ["teacher"],
+  department: "",
+  bandwidthUsed: 0,
+  bandwidthMax: 0,
+}
 
 interface RoleContextValue {
   role: RoleKey
@@ -48,7 +58,14 @@ export function RoleProvider({ children }: { children: ReactNode }) {
           : roles.includes("admin_l2")
             ? "admin_l2"
             : "teacher"
-        setUser({ name: data.full_name ?? "User", roles, department: "" })
+        setUser({
+          name: data.full_name ?? "User",
+          email: data.email ?? "",
+          roles,
+          department: "",
+          bandwidthUsed: 0,
+          bandwidthMax: 0,
+        })
         setRole(primaryRole)
       })
       .catch(() => {
