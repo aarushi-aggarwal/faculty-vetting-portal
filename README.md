@@ -33,16 +33,3 @@ pnpm dev
 ```
 
 Open **http://localhost:3000**
-
----
-
-## Login
-
-| Email | Password |
-|---|---|
-| aarushi.ois1212@gmail.com | Admin@1234 |
-| harisha@hotmail.com | Admin@1234 |
-| harish.aggarwal@pilani.bits-pilani.ac.in | Admin@1234 |
-
-All other users can sign up at `/signup` and will be assigned the **Teacher** role.
-Admins can promote roles via the API at `http://localhost:8000/docs`.
