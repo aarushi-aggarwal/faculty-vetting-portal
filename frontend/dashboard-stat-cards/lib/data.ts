@@ -23,6 +23,7 @@ export type AssignmentStatus =
   | "in_review"
   | "completed"
   | "declined"
+  | "requested"
 
 export type InterviewStatus =
   | "scheduled"
@@ -114,7 +115,7 @@ export interface Interview {
   date: string
   time: string
   duration?: string
-  location: string
+  location?: string
   platform?: string
   interviewers?: { name: string; role: "Lead" | "Co-interviewer" | "Observer" }[]
   outcomes?: { name: string; verdict: "proceed" | "hold" | "reject" }[]

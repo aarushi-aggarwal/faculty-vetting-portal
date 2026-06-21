@@ -30,3 +30,7 @@ class UserWithRoles(BaseModel):
     full_name: str
     is_active: bool
     roles: List[str]
+
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = None
+    new_password: Optional[str] = None
