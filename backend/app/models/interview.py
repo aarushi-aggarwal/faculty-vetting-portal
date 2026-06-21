@@ -1,5 +1,5 @@
-from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, SmallInteger
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, SmallInteger, Uuid
+# from sqlalchemy.dialects.postgresql import UUID  # switch back for PostgreSQL
 from datetime import datetime
 import uuid
 from app.db.base import Base
@@ -7,11 +7,11 @@ from app.db.base import Base
 class Interview(Base):
     __tablename__ = "interviews"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    candidate_id = Column(UUID(as_uuid=True), ForeignKey("candidates.id"), nullable=False)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id = Column(Uuid(as_uuid=True), ForeignKey("candidates.id"), nullable=False)
     round_number = Column(SmallInteger, nullable=False, default=1)
-    parent_interview_id = Column(UUID(as_uuid=True), ForeignKey("interviews.id"), nullable=True)
-    scheduled_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    parent_interview_id = Column(Uuid(as_uuid=True), ForeignKey("interviews.id"), nullable=True)
+    scheduled_by = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     timezone = Column(String(50), nullable=False, default="Asia/Kolkata")

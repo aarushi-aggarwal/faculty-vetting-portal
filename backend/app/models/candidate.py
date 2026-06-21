@@ -1,5 +1,5 @@
-from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, Integer, Text, ForeignKey, Uuid
+# from sqlalchemy.dialects.postgresql import UUID  # switch back for PostgreSQL
 from datetime import datetime
 import uuid
 from app.db.base import Base
@@ -7,7 +7,7 @@ from app.db.base import Base
 class Candidate(Base):
     __tablename__ = "candidates"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     full_name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False)
     phone = Column(String(20), nullable=True)

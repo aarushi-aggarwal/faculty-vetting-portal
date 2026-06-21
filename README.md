@@ -1,37 +1,30 @@
 # Faculty Vetting Portal
 
+## Running on GitHub Codespaces
+
 1. Click the green **Code** button on this repo
 2. Click **Codespaces** → **Create codespace on main**
-3. In the Codespaces terminal run these commands:
+3. In the Codespaces terminal, run the commands below
 
-### Terminal 1 — Database setup
-```bash
-sudo service postgresql start
-sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'postgres';"
-sudo -u postgres psql -c "CREATE DATABASE faculty_vetting;"
-
-cat > backend/.env << 'EOF'
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/faculty_vetting
-SECRET_KEY=changethisinproduction123456789abcdef
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-EOF
-```
+---
 
 ### Terminal 1 — Backend
+
 ```bash
 cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-### Terminal 2 — Seed admin accounts (run once)
+### Terminal 2 — Seed admin accounts (run once after backend starts)
+
 ```bash
 cd backend
 python seed_admins.py
 ```
 
 ### Terminal 3 — Frontend
+
 ```bash
 cd frontend/dashboard-stat-cards
 npm install -g pnpm
@@ -39,4 +32,17 @@ pnpm install
 pnpm dev
 ```
 
-Open "http://localhost:3000"
+Open **http://localhost:3000**
+
+---
+
+## Login
+
+| Email | Password |
+|---|---|
+| aarushi.ois1212@gmail.com | Admin@1234 |
+| harisha@hotmail.com | Admin@1234 |
+| harish.aggarwal@pilani.bits-pilani.ac.in | Admin@1234 |
+
+All other users can sign up at `/signup` and will be assigned the **Teacher** role.
+Admins can promote roles via the API at `http://localhost:8000/docs`.

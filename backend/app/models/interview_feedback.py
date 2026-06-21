@@ -1,5 +1,5 @@
-from sqlalchemy import Column, String, DateTime, Text, Boolean, Numeric, ForeignKey, SmallInteger
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, Text, Boolean, Numeric, ForeignKey, SmallInteger, Uuid
+# from sqlalchemy.dialects.postgresql import UUID  # switch back for PostgreSQL
 from datetime import datetime
 import uuid
 from app.db.base import Base
@@ -7,9 +7,9 @@ from app.db.base import Base
 class InterviewFeedback(Base):
     __tablename__ = "interview_feedback"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    interview_id = Column(UUID(as_uuid=True), ForeignKey("interviews.id"), nullable=False)
-    interviewer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    interview_id = Column(Uuid(as_uuid=True), ForeignKey("interviews.id"), nullable=False)
+    interviewer_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False)
     outcome = Column(String(20), nullable=True)
     domain_score = Column(SmallInteger, nullable=True)
     communication_score = Column(SmallInteger, nullable=True)

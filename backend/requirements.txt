@@ -5,5 +5,5 @@ pydantic
 pydantic-settings
 passlib[bcrypt]
 python-jose[cryptography]
-psycopg2-binary
+# psycopg2-binary  # uncomment for PostgreSQL
 python-multipart
