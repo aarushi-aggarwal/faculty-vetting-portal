@@ -15,6 +15,8 @@ from app.schemas.interview import (
     FeedbackCreate, FeedbackOut, VALID_OUTCOMES
 )
 from app.core.dependencies import require_role, get_current_user
+from app.core.calendar import create_interview_event, update_interview_event
+from app.core.email_notify import notify_interview_scheduled, notify_interview_rescheduled
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 
@@ -62,6 +64,42 @@ def schedule_interview(
     candidate.current_status = "INTERVIEW_SCHEDULED"
     db.commit()
     db.refresh(interview)
+
+    # Collect participant emails for calendar + email
+    participant_users = db.query(User).filter(
+        User.id.in_([p.user_id for p in data.participants])
+    ).all()
+    attendee_emails = [candidate.email] + [u.email for u in participant_users] + [current_user.email]
+
+    # Auto-generate Google Meet link + calendar invite
+    meet_link, cal_event_id = create_interview_event(
+        interview_id=interview.id,
+        candidate_name=candidate.full_name,
+        round_number=round_number,
+        start_time=data.start_time,
+        end_time=data.end_time,
+        timezone=data.timezone or "Asia/Kolkata",
+        attendee_emails=attendee_emails,
+        notes=data.notes,
+    )
+    if meet_link or cal_event_id:
+        interview.meeting_link = meet_link or interview.meeting_link
+        interview.meeting_platform = interview.meeting_platform or "Google Meet"
+        interview.calendar_event_id = cal_event_id
+        db.commit()
+
+    # Send branded email notification
+    notify_interview_scheduled(
+        candidate_name=candidate.full_name,
+        candidate_email=candidate.email,
+        interviewer_emails=[u.email for u in participant_users],
+        round_number=round_number,
+        start_time=data.start_time,
+        end_time=data.end_time,
+        meet_link=meet_link or data.meeting_link,
+        platform=interview.meeting_platform,
+    )
+
     return interview
 
 @router.get("/", response_model=List[InterviewWithNames])
@@ -151,6 +189,37 @@ def reschedule_interview(
     interview.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(interview)
+
+    # Update Google Calendar event and notify attendees
+    if interview.calendar_event_id:
+        update_interview_event(
+            calendar_event_id=interview.calendar_event_id,
+            start_time=data.start_time,
+            end_time=data.end_time,
+            timezone=interview.timezone,
+            reason=getattr(data, "reason", None),
+        )
+
+    candidate = db.query(Candidate).filter(Candidate.id == interview.candidate_id).first()
+    participants = db.query(InterviewParticipant).filter(
+        InterviewParticipant.interview_id == interview.id
+    ).all()
+    participant_users = db.query(User).filter(
+        User.id.in_([p.user_id for p in participants])
+    ).all()
+
+    if candidate:
+        notify_interview_rescheduled(
+            candidate_name=candidate.full_name,
+            candidate_email=candidate.email,
+            interviewer_emails=[u.email for u in participant_users],
+            round_number=interview.round_number,
+            new_start=data.start_time,
+            new_end=data.end_time,
+            reason=getattr(data, "reason", None),
+            meet_link=interview.meeting_link,
+        )
+
     return interview
 
 @router.patch("/{interview_id}/complete")

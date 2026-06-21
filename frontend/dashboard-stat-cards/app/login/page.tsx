@@ -30,9 +30,8 @@ export default function LoginPage() {
         return
       }
       const { access_token } = await res.json()
-      // Store token as a cookie accessible by Next.js server components
       document.cookie = `portal_token=${access_token}; path=/; max-age=3600; SameSite=Lax`
-      router.push("/")
+      window.location.href = "/"
     } catch {
       setError("Could not connect to the server. Make sure the backend is running.")
     } finally {

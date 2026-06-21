@@ -45,7 +45,7 @@ export default function SignupPage() {
 
       const { access_token } = await res.json()
       document.cookie = `portal_token=${access_token}; path=/; max-age=3600; SameSite=Lax`
-      router.push("/")
+      window.location.href = "/"
     } catch {
       setError("Could not connect to the server. Make sure the backend is running.")
     } finally {

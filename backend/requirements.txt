@@ -7,3 +7,6 @@ passlib[bcrypt]
 python-jose[cryptography]
 # psycopg2-binary  # uncomment for PostgreSQL
 python-multipart
+google-auth
+google-api-python-client
+resend

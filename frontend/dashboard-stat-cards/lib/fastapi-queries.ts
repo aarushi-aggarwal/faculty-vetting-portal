@@ -207,11 +207,15 @@ export async function getUsers(): Promise<PortalUser[]> {
 
 export async function getDashboardStats() {
   try {
-    const [candidates, assignments, interviews] = await Promise.all([
+    const [candResult, assignResult, ivResult] = await Promise.allSettled([
       apiGet<ApiCandidate[]>("/candidates/"),
       apiGet<ApiAssignment[]>("/assignments/"),
       apiGet<ApiInterview[]>("/interviews/"),
     ])
+
+    const candidates = candResult.status === "fulfilled" ? candResult.value : []
+    const assignments = assignResult.status === "fulfilled" ? assignResult.value : []
+    const interviews = ivResult.status === "fulfilled" ? ivResult.value : []
 
     const underReview = candidates.filter(
       (c) => c.current_status === "UNDER_REVIEW"

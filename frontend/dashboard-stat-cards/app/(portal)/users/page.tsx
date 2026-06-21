@@ -1,18 +1,14 @@
 import { Topbar } from "@/components/portal/topbar"
-import { Card } from "@/components/ui/card"
+import { UsersClient } from "@/components/portal/users-client"
+import { getUsers } from "@/lib/fastapi-queries"
 
-export default function UsersPage() {
+export default async function UsersPage() {
+  const users = await getUsers()
+
   return (
     <>
-      <Topbar title="Users" showDate />
-      <div className="space-y-6 p-6">
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold">Users Management</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            User management functionality coming soon.
-          </p>
-        </Card>
-      </div>
+      <Topbar title="Users" subtitle={`${users.length} users`} showDate />
+      <UsersClient users={users} />
     </>
   )
 }
