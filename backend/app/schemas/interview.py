@@ -16,6 +16,9 @@ class PanelMemberOut(BaseModel):
     name: str
     role: str
     outcome: Optional[str] = None  # this interviewer's final feedback outcome, if any
+    strengths: Optional[str] = None
+    concerns: Optional[str] = None
+    feedback_submitted_at: Optional[datetime] = None
 
 class InterviewCreate(BaseModel):
     candidate_id: UUID

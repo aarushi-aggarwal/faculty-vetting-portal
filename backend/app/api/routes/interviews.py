@@ -29,9 +29,9 @@ def _panels_for(db: Session, interview_ids):
     if not interview_ids:
         return {}
 
-    outcomes = {
-        (fid, uid): outcome for fid, uid, outcome in (
-            db.query(InterviewFeedback.interview_id, InterviewFeedback.interviewer_id, InterviewFeedback.outcome)
+    feedback = {
+        (f.interview_id, f.interviewer_id): f for f in (
+            db.query(InterviewFeedback)
             .filter(InterviewFeedback.interview_id.in_(interview_ids), InterviewFeedback.is_final == True)
             .all()
         )
@@ -46,9 +46,13 @@ def _panels_for(db: Session, interview_ids):
     )
     panels: dict = {}
     for iid, uid, role, name in rows:
+        f = feedback.get((iid, uid))
         panels.setdefault(iid, []).append(PanelMemberOut(
             user_id=uid, name=name, role=role or "co_interviewer",
-            outcome=outcomes.get((iid, uid)),
+            outcome=f.outcome if f else None,
+            strengths=f.strengths if f else None,
+            concerns=f.concerns if f else None,
+            feedback_submitted_at=f.submitted_at if f else None,
         ))
     return panels
 
@@ -318,6 +322,21 @@ def final_outcome(
         interview.status = "completed"
     db.commit()
     return {"message": f"Candidate {to_status.lower()}"}
+
+
+@router.get("/{interview_id}/feedback/mine", response_model=Optional[FeedbackOut])
+def my_feedback(
+    interview_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("master_admin", "admin_l2", "teacher"))
+):
+    """The current user's own feedback for this interview (draft or final), if any."""
+    return (
+        db.query(InterviewFeedback)
+        .filter(InterviewFeedback.interview_id == interview_id, InterviewFeedback.interviewer_id == current_user.id)
+        .order_by(InterviewFeedback.is_final.desc())
+        .first()
+    )
 
 
 @router.post("/{interview_id}/feedback", response_model=FeedbackOut)

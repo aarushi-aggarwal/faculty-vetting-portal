@@ -67,6 +67,9 @@ interface ApiPanelMember {
   name: string
   role: string
   outcome: string | null
+  strengths: string | null
+  concerns: string | null
+  feedback_submitted_at: string | null
 }
 
 interface ApiInterview {
@@ -169,6 +172,9 @@ function mapPanelMember(p: ApiPanelMember): PanelMember {
     name: p.name,
     role: (p.role as ParticipantRole) ?? "co_interviewer",
     outcome: (p.outcome as InterviewOutcome) ?? null,
+    strengths: p.strengths,
+    concerns: p.concerns,
+    feedbackSubmittedAt: p.feedback_submitted_at,
   }
 }
 

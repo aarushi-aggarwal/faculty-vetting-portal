@@ -42,18 +42,18 @@ def _action_needed(
     candidate's latest interview round, if any.
     """
     if status in ("UPLOADED", "PENDING_ASSIGNMENT"):
-        return "Assign to teacher", False
+        return "Assign to teacher", True
     if status in ("ASSIGNED", "UNDER_REVIEW"):
         return "Awaiting review", False
     if status == "PENDING_DECISION":
         return "Decision required", True
     if status == "SHORTLISTED":
-        return "Schedule interview", False
+        return "Schedule interview", True
     if status in ("INTERVIEW_SCHEDULED", "INTERVIEW_DONE", "OFFER_PENDING"):
         participant_count, final_count = feedback_counts
         if participant_count > 0 and final_count >= participant_count:
             return "Final decision", True
-        return "Feedback pending", False
+        return "Interview Feedback Pending", False
     if status in _CLOSED_STATUSES:
         return "Closed", False
     if status == "ON_HOLD":

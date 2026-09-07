@@ -138,6 +138,9 @@ export interface PanelMember {
   name: string
   role: ParticipantRole
   outcome?: InterviewOutcome | null
+  strengths?: string | null
+  concerns?: string | null
+  feedbackSubmittedAt?: string | null
 }
 
 export interface Interview {

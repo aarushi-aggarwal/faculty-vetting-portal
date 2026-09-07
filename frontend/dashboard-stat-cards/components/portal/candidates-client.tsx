@@ -2,13 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Search } from "lucide-react"
+import { Search, ArchiveRestore } from "lucide-react"
 import { Avatar, Card, StatusBadge, ActionNeededBadge } from "./ui"
 import { CandidatePanel } from "./candidate-panel"
 import { useSortableRows, SortableTh } from "./sortable"
 import { cn } from "@/lib/utils"
 import { statusConfig } from "@/lib/badges"
 import type { CandidateBoardRow, CvStatus } from "@/lib/data"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
+function getToken() {
+  if (typeof document === "undefined") return ""
+  return document.cookie.split("; ").find((c) => c.startsWith("portal_token="))?.split("=")[1] ?? ""
+}
 
 type SortKey = "name" | "subject" | "status" | "updatedAt"
 type PanelTab = "Profile" | "Reviews" | "Interviews"
@@ -26,10 +32,27 @@ export function CandidatesClient({ candidates }: { candidates: CandidateBoardRow
     (searchParams.get("status") as CvStatus) || "all",
   )
   const [actionOnly, setActionOnly] = useState(searchParams.get("actionRequired") === "1")
+  const [tab, setTab] = useState<"active" | "archived">("active")
   const [rows, setRows] = useState(candidates)
   const [panel, setPanel] = useState<{ id: string; tab: PanelTab } | null>(null)
+  const [unarchiving, setUnarchiving] = useState<string | null>(null)
 
   useEffect(() => setRows(candidates), [candidates])
+
+  const active = rows.filter((c) => c.status !== "on_hold")
+  const archived = rows.filter((c) => c.status === "on_hold")
+
+  async function unarchive(id: string) {
+    setUnarchiving(id)
+    try {
+      await fetch(`${API_URL}/candidates/${id}/unarchive`, {
+        method: "PATCH", headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      router.refresh()
+    } finally {
+      setUnarchiving(null)
+    }
+  }
 
   // Deep-link support: dashboard cards link here with ?open=<id>&tab=reviews.
   useEffect(() => {
@@ -42,14 +65,16 @@ export function CandidatesClient({ candidates }: { candidates: CandidateBoardRow
   }, [])
 
   const filtered = useMemo(() => {
-    return rows.filter((c) => {
+    const source = tab === "active" ? active : archived
+    return source.filter((c) => {
       const q = query.toLowerCase()
       const matchesQuery = c.name.toLowerCase().includes(q) || c.subject.toLowerCase().includes(q)
-      const matchesStatus = status === "all" || c.status === status
-      const matchesAction = !actionOnly || c.actionHighlight
+      const matchesStatus = tab === "archived" || status === "all" || c.status === status
+      const matchesAction = tab === "archived" || !actionOnly || c.actionHighlight
       return matchesQuery && matchesStatus && matchesAction
     })
-  }, [rows, query, status, actionOnly])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, tab, query, status, actionOnly])
 
   const { sorted, sortKey, sortDir, toggleSort } = useSortableRows<CandidateBoardRow, SortKey>(
     filtered,
@@ -78,6 +103,23 @@ export function CandidatesClient({ candidates }: { candidates: CandidateBoardRow
   return (
     <>
       <div className="space-y-4 p-6">
+        <div className="flex gap-1 border-b border-border">
+          {([["active", `Active (${active.length})`], ["archived", `Archived (${archived.length})`]] as const).map(
+            ([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={cn(
+                  "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+                  tab === key ? "border-brand text-brand" : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ),
+          )}
+        </div>
+
         <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -88,25 +130,29 @@ export function CandidatesClient({ candidates }: { candidates: CandidateBoardRow
               className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
             />
           </div>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as "all" | CvStatus)}
-            className="h-9 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
-          >
-            <option value="all">All statuses</option>
-            {(Object.keys(statusConfig) as CvStatus[]).map((s) => (
-              <option key={s} value={s}>{statusConfig[s].label}</option>
-            ))}
-          </select>
-          <label className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm">
-            <input
-              type="checkbox"
-              checked={actionOnly}
-              onChange={(e) => setActionOnly(e.target.checked)}
-              className="size-4 rounded border-border accent-brand"
-            />
-            Action required only
-          </label>
+          {tab === "active" && (
+            <>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as "all" | CvStatus)}
+                className="h-9 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+              >
+                <option value="all">All statuses</option>
+                {(Object.keys(statusConfig) as CvStatus[]).filter((s) => s !== "on_hold").map((s) => (
+                  <option key={s} value={s}>{statusConfig[s].label}</option>
+                ))}
+              </select>
+              <label className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={actionOnly}
+                  onChange={(e) => setActionOnly(e.target.checked)}
+                  className="size-4 rounded border-border accent-brand"
+                />
+                Action required only
+              </label>
+            </>
+          )}
         </Card>
 
         <Card className="overflow-hidden">
@@ -118,7 +164,11 @@ export function CandidatesClient({ candidates }: { candidates: CandidateBoardRow
                   <SortableTh label="Subject" sortKey="subject" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-3 font-medium">Assigned To</th>
-                  <th className="px-3 py-3 font-medium">Action Needed</th>
+                  {tab === "active" ? (
+                    <th className="px-3 py-3 font-medium">Action Needed</th>
+                  ) : (
+                    <th className="px-3 py-3" />
+                  )}
                   <SortableTh label="Last Updated" sortKey="updatedAt" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 </tr>
               </thead>
@@ -136,9 +186,21 @@ export function CandidatesClient({ candidates }: { candidates: CandidateBoardRow
                     <td className="px-3 py-3 text-muted-foreground">
                       {c.assignedTo.length === 0 ? "—" : c.assignedTo.join(", ")}
                     </td>
-                    <td className="px-3 py-3">
-                      <ActionNeededBadge label={c.actionNeeded} highlight={c.actionHighlight} />
-                    </td>
+                    {tab === "active" ? (
+                      <td className="px-3 py-3">
+                        <ActionNeededBadge label={c.actionNeeded} highlight={c.actionHighlight} />
+                      </td>
+                    ) : (
+                      <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => unarchive(c.id)}
+                          disabled={unarchiving === c.id}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-60"
+                        >
+                          <ArchiveRestore className="size-3.5" /> Unarchive
+                        </button>
+                      </td>
+                    )}
                     <td className="px-5 py-3 text-muted-foreground">
                       {new Date(c.updatedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                     </td>
@@ -147,7 +209,7 @@ export function CandidatesClient({ candidates }: { candidates: CandidateBoardRow
                 {sorted.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-5 py-10 text-center text-muted-foreground">
-                      No candidates match your filters.
+                      {tab === "archived" ? "No archived candidates." : "No candidates match your filters."}
                     </td>
                   </tr>
                 )}
@@ -155,7 +217,7 @@ export function CandidatesClient({ candidates }: { candidates: CandidateBoardRow
             </table>
           </div>
           <div className="border-t border-border px-5 py-3 text-sm text-muted-foreground">
-            Showing {sorted.length} of {rows.length}
+            Showing {sorted.length} of {tab === "active" ? active.length : archived.length}
           </div>
         </Card>
       </div>

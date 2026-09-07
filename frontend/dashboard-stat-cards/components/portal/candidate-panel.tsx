@@ -604,13 +604,25 @@ export function CandidatePanel({
                               </a>
                             )}
                             {iv.panel.length > 0 && (
-                              <div className="mt-3 flex flex-wrap gap-2">
+                              <div className="mt-3 space-y-2">
                                 {iv.panel.map((p) => (
-                                  <span key={p.userId} className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs">
-                                    {p.name}
-                                    <ParticipantRoleBadge role={p.role} />
-                                    {p.outcome && <OutcomeBadge verdict={p.outcome} />}
-                                  </span>
+                                  <div key={p.userId} className="rounded-md border border-border p-2.5">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className="text-xs font-medium">{p.name}</span>
+                                      <ParticipantRoleBadge role={p.role} />
+                                      {p.outcome ? (
+                                        <OutcomeBadge verdict={p.outcome} />
+                                      ) : (
+                                        <span className="text-[11px] text-muted-foreground">Feedback pending</span>
+                                      )}
+                                    </div>
+                                    {(p.strengths || p.concerns) && (
+                                      <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
+                                        {p.strengths && <p><span className="font-medium text-foreground">Strengths:</span> {p.strengths}</p>}
+                                        {p.concerns && <p><span className="font-medium text-foreground">Concerns:</span> {p.concerns}</p>}
+                                      </div>
+                                    )}
+                                  </div>
                                 ))}
                               </div>
                             )}
