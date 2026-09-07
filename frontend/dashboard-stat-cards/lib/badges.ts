@@ -51,11 +51,8 @@ export const assignmentStatusConfig: Record<
   { label: string; className: string }
 > = {
   pending: { label: "Pending", className: "bg-amber-100 text-amber-800 ring-amber-200" },
-  pending_acceptance: { label: "Pending Acceptance", className: "bg-amber-100 text-amber-800 ring-amber-200" },
   in_review: { label: "In Review", className: "bg-purple-100 text-purple-700 ring-purple-200" },
-  completed: { label: "Completed", className: "bg-green-100 text-green-700 ring-green-200" },
-  declined:  { label: "Declined",  className: "bg-red-100 text-red-700 ring-red-200" },
-  requested: { label: "Requested", className: "bg-sky-100 text-sky-700 ring-sky-200" },
+  completed: { label: "Scanned", className: "bg-green-100 text-green-700 ring-green-200" },
 }
 
 export const interviewStatusConfig: Record<

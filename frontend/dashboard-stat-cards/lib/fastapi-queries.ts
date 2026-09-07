@@ -1,5 +1,8 @@
 import { apiGet } from "@/lib/api-client"
-import type { Candidate, Assignment, Interview, PortalUser } from "@/lib/data"
+import type {
+  Candidate, Assignment, Interview, PortalUser, WorkloadRow, Verdict, CvStatus,
+} from "@/lib/data"
+import { pipelineStages } from "@/lib/data"
 
 export type { CvStatus } from "@/lib/data"
 
@@ -29,7 +32,18 @@ interface ApiAssignment {
   status: string
   due_date: string | null
   assigned_at: string
+  completed_at: string | null
+  verdict: string | null
   overdue: boolean
+}
+
+interface ApiWorkloadRow {
+  teacher_id: string
+  teacher_name: string
+  assigned: number
+  reviewed: number
+  pending: number
+  interviewed: number
 }
 
 interface ApiInterview {
@@ -43,6 +57,7 @@ interface ApiInterview {
   end_time: string
   meeting_platform: string | null
   meeting_link: string | null
+  panel: string[]
 }
 
 interface ApiUser {
@@ -74,6 +89,9 @@ function mapCandidate(c: ApiCandidate): Candidate {
   }
 }
 
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+
 function mapAssignment(a: ApiAssignment): Assignment {
   return {
     id: a.id,
@@ -91,11 +109,9 @@ function mapAssignment(a: ApiAssignment): Assignment {
         })
       : "N/A",
     overdue: a.overdue,
-    assignedDate: new Date(a.assigned_at).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }),
+    assignedDate: shortDate(a.assigned_at),
+    verdict: (a.verdict as Verdict) ?? null,
+    completedDate: a.completed_at ? shortDate(a.completed_at) : null,
   }
 }
 
@@ -114,6 +130,8 @@ function mapInterview(i: ApiInterview): Interview {
     }),
     time: start.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
     location: i.meeting_platform ?? "Virtual",
+    platform: i.meeting_link ?? undefined,
+    interviewers: (i.panel ?? []).map((name) => ({ name, role: "Co-interviewer" as const })),
   }
 }
 
@@ -205,46 +223,63 @@ export async function getUsers(): Promise<PortalUser[]> {
   }
 }
 
-export async function getDashboardStats() {
+export async function getTeacherWorkload(): Promise<WorkloadRow[]> {
   try {
-    const [candResult, assignResult, ivResult] = await Promise.allSettled([
-      apiGet<ApiCandidate[]>("/candidates/"),
-      apiGet<ApiAssignment[]>("/assignments/"),
-      apiGet<ApiInterview[]>("/interviews/"),
-    ])
-
-    const candidates = candResult.status === "fulfilled" ? candResult.value : []
-    const assignments = assignResult.status === "fulfilled" ? assignResult.value : []
-    const interviews = ivResult.status === "fulfilled" ? ivResult.value : []
-
-    const underReview = candidates.filter(
-      (c) => c.current_status === "UNDER_REVIEW"
-    ).length
-    const shortlisted = candidates.filter(
-      (c) => c.current_status === "SHORTLISTED"
-    ).length
-    const pendingAssignments = assignments.filter(
-      (a) => a.status === "pending"
-    ).length
-    const completedInterviews = interviews.filter(
-      (i) => i.status === "completed"
-    ).length
-
-    return {
-      totalCandidates: candidates.length,
-      underReview,
-      shortlisted,
-      pendingAssignments,
-      completedInterviews,
-    }
+    const data = await apiGet<ApiWorkloadRow[]>("/users/workload")
+    return data.map((r) => ({
+      teacherId: r.teacher_id,
+      teacher: r.teacher_name,
+      assigned: r.assigned,
+      reviewed: r.reviewed,
+      pending: r.pending,
+      interviewed: r.interviewed,
+    }))
   } catch (err) {
-    console.error("[api] getDashboardStats error:", err)
-    return {
-      totalCandidates: 0,
-      underReview: 0,
-      shortlisted: 0,
-      pendingAssignments: 0,
-      completedInterviews: 0,
-    }
+    console.error("[api] getTeacherWorkload error:", err)
+    return []
+  }
+}
+
+export interface AdminDashboardData {
+  totalCandidates: number
+  pipeline: { stage: string; status: CvStatus; count: number }[]
+  awaitingAssignment: number
+  outForReview: number
+  shortlisted: number
+  interviewsScheduled: number
+  interviewsDone: number
+  /** Shortlisted candidates waiting for Admin L2 to put them up for interviews. */
+  readyForInterview: Candidate[]
+}
+
+/** One round trip for everything both admin dashboards chart. */
+export async function getAdminDashboardData(): Promise<AdminDashboardData> {
+  const [candResult, assignResult, ivResult] = await Promise.allSettled([
+    apiGet<ApiCandidate[]>("/candidates/"),
+    apiGet<ApiAssignment[]>("/assignments/"),
+    apiGet<ApiInterview[]>("/interviews/"),
+  ])
+
+  const candidates = candResult.status === "fulfilled" ? candResult.value : []
+  const assignments = assignResult.status === "fulfilled" ? assignResult.value : []
+  const interviews = ivResult.status === "fulfilled" ? ivResult.value : []
+
+  const countByStatus = (s: string) =>
+    candidates.filter((c) => c.current_status === s).length
+
+  return {
+    totalCandidates: candidates.length,
+    pipeline: pipelineStages.map((s) => ({
+      ...s,
+      count: countByStatus(s.status.toUpperCase()),
+    })),
+    awaitingAssignment: countByStatus("UPLOADED") + countByStatus("PENDING_ASSIGNMENT"),
+    outForReview: assignments.filter((a) => ["pending", "in_review"].includes(a.status)).length,
+    shortlisted: countByStatus("SHORTLISTED"),
+    interviewsScheduled: interviews.filter((i) => ["scheduled", "rescheduled"].includes(i.status)).length,
+    interviewsDone: interviews.filter((i) => i.status === "completed").length,
+    readyForInterview: candidates
+      .filter((c) => c.current_status === "SHORTLISTED")
+      .map(mapCandidate),
   }
 }

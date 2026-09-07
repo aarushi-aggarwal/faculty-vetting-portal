@@ -50,6 +50,7 @@ class InterviewWithNames(BaseModel):
     end_time: datetime
     meeting_platform: Optional[str]
     meeting_link: Optional[str]
+    panel: List[str] = []
 
 class RescheduleRequest(BaseModel):
     start_time: datetime

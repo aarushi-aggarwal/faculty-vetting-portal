@@ -7,6 +7,8 @@ from uuid import UUID
 from app.db.session import get_db
 from app.models.user import User
 from app.models.role import Role, UserRole
+from app.models.assignment import Assignment
+from app.models.interview_participant import InterviewParticipant
 from app.core.dependencies import require_role
 from app.core.security import hash_password
 from app.schemas.user import UserWithRoles, UpdateProfileRequest
@@ -35,6 +37,42 @@ def list_users(
 ):
     users = db.query(User).filter(User.deleted_at == None).order_by(User.full_name).all()
     return [_user_with_roles(u, db) for u in users]
+
+
+@router.get("/workload")
+def teacher_workload(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("master_admin", "admin_l2")),
+):
+    """Per-teacher pipeline counts: assigned, reviewed, pending, interviewed."""
+    teachers = (
+        db.query(User)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(User.deleted_at == None, UserRole.revoked_at == None, Role.name == "teacher")
+        .order_by(User.full_name)
+        .all()
+    )
+
+    assignment_rows = (
+        db.query(Assignment.teacher_id, Assignment.status)
+        .filter(Assignment.status != "reassigned")
+        .all()
+    )
+    interview_rows = db.query(InterviewParticipant.user_id).all()
+
+    rows = []
+    for t in teachers:
+        mine = [status for tid, status in assignment_rows if tid == t.id]
+        rows.append({
+            "teacher_id": t.id,
+            "teacher_name": t.full_name,
+            "assigned": len(mine),
+            "reviewed": sum(1 for s in mine if s == "completed"),
+            "pending": sum(1 for s in mine if s in ("pending", "in_review")),
+            "interviewed": sum(1 for (uid,) in interview_rows if uid == t.id),
+        })
+    return rows
 
 
 @router.get("/me")

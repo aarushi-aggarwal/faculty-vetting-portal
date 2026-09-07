@@ -1,23 +1,20 @@
-import { Plus } from "lucide-react"
 import { Topbar } from "@/components/portal/topbar"
-import { getInterviews } from "@/lib/fastapi-queries"
+import { getInterviews, getCandidates } from "@/lib/fastapi-queries"
 import { InterviewsClient } from "@/components/portal/interviews-client"
 
 export default async function InterviewsPage() {
-  const interviews = await getInterviews()
+  const [interviews, candidates] = await Promise.all([getInterviews(), getCandidates()])
+
+  // Shortlisted candidates are the ones waiting to be put up for interviews,
+  // plus anyone already in the interview stage who may need another round.
+  const shortlisted = candidates.filter((c) =>
+    ["shortlisted", "interview_scheduled", "interview_done"].includes(c.status),
+  )
 
   return (
     <>
-      <Topbar
-        title="Interviews"
-        actions={
-          <button className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3 text-sm font-medium text-brand-foreground hover:bg-brand/90">
-            <Plus className="size-4" />
-            Schedule Interview
-          </button>
-        }
-      />
-      <InterviewsClient interviews={interviews} />
+      <Topbar title="Interviews" subtitle="Panels for shortlisted candidates" />
+      <InterviewsClient interviews={interviews} shortlisted={shortlisted} />
     </>
   )
 }

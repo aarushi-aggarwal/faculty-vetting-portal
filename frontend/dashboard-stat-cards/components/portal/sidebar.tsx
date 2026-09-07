@@ -12,7 +12,6 @@ import {
   Video,
   GraduationCap,
   LogOut,
-  BookOpen,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -43,10 +42,10 @@ const navByRole: Record<RoleKey, NavItem[]> = {
     { label: "Settings", href: "/settings", icon: Settings },
   ],
   teacher: [
-    { label: "My Queue",     href: "/my-queue",     icon: Inbox },
-    { label: "Browse CVs",   href: "/browse-cvs",   icon: BookOpen },
-    { label: "My Interviews",href: "/my-interviews", icon: Video },
-    { label: "Settings",     href: "/settings",      icon: Settings },
+    { label: "Dashboard",     href: "/",              icon: LayoutDashboard },
+    { label: "My Queue",      href: "/my-queue",      icon: Inbox },
+    { label: "My Interviews", href: "/my-interviews", icon: Video },
+    { label: "Settings",      href: "/settings",      icon: Settings },
   ],
 }
 

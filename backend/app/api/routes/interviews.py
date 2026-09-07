@@ -20,6 +20,41 @@ from app.core.email_notify import notify_interview_scheduled, notify_interview_r
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 
+
+def _panels_for(db: Session, interview_ids):
+    """Map interview_id -> list of panel member names."""
+    if not interview_ids:
+        return {}
+    rows = (
+        db.query(InterviewParticipant.interview_id, User.full_name)
+        .join(User, User.id == InterviewParticipant.user_id)
+        .filter(InterviewParticipant.interview_id.in_(interview_ids))
+        .all()
+    )
+    panels = {}
+    for iid, name in rows:
+        panels.setdefault(iid, []).append(name)
+    return panels
+
+
+def _to_out(rows, panels) -> List[InterviewWithNames]:
+    return [
+        InterviewWithNames(
+            id=iv.id,
+            candidate_id=iv.candidate_id,
+            candidate_name=cname,
+            candidate_email=cemail,
+            round_number=iv.round_number,
+            status=iv.status,
+            start_time=iv.start_time,
+            end_time=iv.end_time,
+            meeting_platform=iv.meeting_platform,
+            meeting_link=iv.meeting_link,
+            panel=panels.get(iv.id, []),
+        )
+        for iv, cname, cemail in rows
+    ]
+
 @router.post("/", response_model=InterviewOut)
 def schedule_interview(
     data: InterviewCreate,
@@ -113,21 +148,7 @@ def list_interviews(
         .order_by(Interview.start_time.desc())
         .all()
     )
-    return [
-        InterviewWithNames(
-            id=iv.id,
-            candidate_id=iv.candidate_id,
-            candidate_name=cname,
-            candidate_email=cemail,
-            round_number=iv.round_number,
-            status=iv.status,
-            start_time=iv.start_time,
-            end_time=iv.end_time,
-            meeting_platform=iv.meeting_platform,
-            meeting_link=iv.meeting_link,
-        )
-        for iv, cname, cemail in rows
-    ]
+    return _to_out(rows, _panels_for(db, [iv.id for iv, _, _ in rows]))
 
 @router.get("/my", response_model=List[InterviewWithNames])
 def my_interviews(
@@ -142,23 +163,25 @@ def my_interviews(
         db.query(Interview, Candidate.full_name, Candidate.email)
         .join(Candidate, Candidate.id == Interview.candidate_id)
         .filter(Interview.id.in_(interview_ids))
+        .order_by(Interview.start_time.asc())
         .all()
     )
-    return [
-        InterviewWithNames(
-            id=iv.id,
-            candidate_id=iv.candidate_id,
-            candidate_name=cname,
-            candidate_email=cemail,
-            round_number=iv.round_number,
-            status=iv.status,
-            start_time=iv.start_time,
-            end_time=iv.end_time,
-            meeting_platform=iv.meeting_platform,
-            meeting_link=iv.meeting_link,
-        )
-        for iv, cname, cemail in rows
-    ]
+    return _to_out(rows, _panels_for(db, interview_ids))
+
+@router.get("/candidate/{candidate_id}", response_model=List[InterviewWithNames])
+def interviews_for_candidate(
+    candidate_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("master_admin", "admin_l2", "teacher"))
+):
+    rows = (
+        db.query(Interview, Candidate.full_name, Candidate.email)
+        .join(Candidate, Candidate.id == Interview.candidate_id)
+        .filter(Interview.candidate_id == candidate_id)
+        .order_by(Interview.round_number.asc())
+        .all()
+    )
+    return _to_out(rows, _panels_for(db, [iv.id for iv, _, _ in rows]))
 
 @router.get("/{interview_id}", response_model=InterviewOut)
 def get_interview(

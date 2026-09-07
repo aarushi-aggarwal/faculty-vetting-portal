@@ -23,7 +23,7 @@ export function CandidatesClient({
   candidates: Candidate[]
   archivedCandidates?: Candidate[]
   statusFilters: ("all" | CvStatus)[]
-  statusConfig: Record<CvStatus | "all", { label: string; className: string }>
+  statusConfig: Record<CvStatus, { label: string; className: string }>
   initialStatus?: "all" | CvStatus
 }) {
   const [tab, setTab] = useState<"active" | "archived">("active")

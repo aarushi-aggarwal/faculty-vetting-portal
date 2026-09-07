@@ -103,36 +103,35 @@ def get_reviews_for_assignment(
 def get_candidate_review_summary(
     candidate_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("master_admin", "admin_l2"))
+    current_user: User = Depends(require_role("master_admin", "admin_l2", "teacher"))
 ):
     assignments = db.query(Assignment).filter(Assignment.candidate_id == candidate_id).all()
     assignment_ids = [a.id for a in assignments]
 
-    reviews = db.query(Review).filter(
-        Review.assignment_id.in_(assignment_ids),
-        Review.is_final == True
-    ).all()
+    rows = (
+        db.query(Review, User.full_name)
+        .join(User, User.id == Review.reviewer_id)
+        .filter(Review.assignment_id.in_(assignment_ids), Review.is_final == True)
+        .order_by(Review.submitted_at.asc())
+        .all()
+    ) if assignment_ids else []
 
-    verdicts = [r.verdict for r in reviews]
-    scores = [float(r.overall_score) for r in reviews if r.overall_score]
+    verdicts = [r.verdict for r, _ in rows]
 
     return {
         "candidate_id": candidate_id,
-        "total_reviews": len(reviews),
+        "total_reviews": len(rows),
         "verdicts": {
             "shortlist": verdicts.count("shortlist"),
             "reject": verdicts.count("reject"),
-            "flag_discussion": verdicts.count("flag_discussion")
         },
-        "average_score": round(sum(scores) / len(scores), 2) if scores else None,
         "reviews": [
             {
+                "reviewer_name": name,
                 "verdict": r.verdict,
-                "overall_score": r.overall_score,
-                "strengths": r.strengths,
-                "concerns": r.concerns,
-                "submitted_at": r.submitted_at
-            } for r in reviews
+                "notes": r.recommendation,
+                "submitted_at": r.submitted_at,
+            } for r, name in rows
         ]
     }
 

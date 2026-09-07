@@ -31,23 +31,6 @@ def create_candidate(
     return candidate
 
 
-# /available must come before /{candidate_id} to avoid routing conflict
-@router.get("/available", response_model=List[CandidateOut])
-def available_candidates(
-    subject: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("master_admin", "admin_l2", "teacher")),
-):
-    """Candidates in PENDING_ASSIGNMENT or UPLOADED state — shown to teachers for self-selection."""
-    query = db.query(Candidate).filter(
-        Candidate.deleted_at == None,
-        Candidate.current_status.in_(["PENDING_ASSIGNMENT", "UPLOADED"]),
-    )
-    if subject:
-        query = query.filter(Candidate.preferred_subject.ilike(f"%{subject}%"))
-    return query.order_by(Candidate.created_at.desc()).all()
-
-
 @router.get("/", response_model=List[CandidateOut])
 def list_candidates(
     status: Optional[str] = None,
