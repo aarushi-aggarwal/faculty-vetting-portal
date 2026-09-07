@@ -6,8 +6,8 @@ import type { CvStatus } from "@/lib/data"
 
 const statusFilters: ("all" | CvStatus)[] = [
   "all", "uploaded", "pending_assignment", "assigned", "under_review",
-  "shortlisted", "interview_scheduled", "interview_done", "offer_pending",
-  "accepted", "rejected",
+  "pending_decision", "shortlisted", "interview_scheduled", "interview_done",
+  "offer_pending", "accepted", "rejected",
 ]
 
 export default async function CandidatesPage({

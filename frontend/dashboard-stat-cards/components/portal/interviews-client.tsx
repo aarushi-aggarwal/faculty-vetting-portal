@@ -2,12 +2,19 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Search, Clock, Video, Users2, Plus } from "lucide-react"
+import { Search, Clock, Video, Users2, Plus, Check, Ban, Loader2 } from "lucide-react"
 import { Avatar, Card, InterviewStatusBadge } from "./ui"
 import { ScheduleInterviewModal } from "./schedule-interview-modal"
 import { interviewStatusConfig } from "@/lib/badges"
 import { cn } from "@/lib/utils"
 import type { Candidate, Interview } from "@/lib/data"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
+
+function getToken() {
+  if (typeof document === "undefined") return ""
+  return document.cookie.split("; ").find((c) => c.startsWith("portal_token="))?.split("=")[1] ?? ""
+}
 
 export function InterviewsClient({
   interviews,
@@ -19,11 +26,27 @@ export function InterviewsClient({
   const router = useRouter()
   const [query, setQuery] = useState("")
   const [showSchedule, setShowSchedule] = useState(false)
+  const [deciding, setDeciding] = useState<string | null>(null)
 
   const filtered = useMemo(
     () => interviews.filter((i) => i.candidate.toLowerCase().includes(query.toLowerCase())),
     [query, interviews],
   )
+
+  /** The last step of the flow: after the interview, accept or reject the candidate. */
+  async function recordFinal(interviewId: string, outcome: "accept" | "reject") {
+    setDeciding(interviewId)
+    try {
+      const res = await fetch(`${API_URL}/interviews/${interviewId}/final-outcome`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ outcome }),
+      })
+      if (res.ok) router.refresh()
+    } finally {
+      setDeciding(null)
+    }
+  }
 
   return (
     <>
@@ -79,6 +102,29 @@ export function InterviewsClient({
                     : "No panel assigned"}
                 </span>
               </div>
+
+              {iv.status === "completed" && (
+                <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-3">
+                  <p className="flex-1 text-sm text-muted-foreground">
+                    Interview done — record the final decision.
+                  </p>
+                  <button
+                    onClick={() => recordFinal(iv.id, "accept")}
+                    disabled={deciding === iv.id}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-brand-foreground hover:bg-brand/90 disabled:opacity-60"
+                  >
+                    {deciding === iv.id ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                    Accept candidate
+                  </button>
+                  <button
+                    onClick={() => recordFinal(iv.id, "reject")}
+                    disabled={deciding === iv.id}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-60"
+                  >
+                    <Ban className="size-3.5" /> Reject
+                  </button>
+                </div>
+              )}
             </Card>
           ))}
           {filtered.length === 0 && (

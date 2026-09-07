@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
+from pydantic import BaseModel
 
 from app.db.session import get_db
 from app.models.interview import Interview
 from app.models.interview_participant import InterviewParticipant
 from app.models.interview_feedback import InterviewFeedback
 from app.models.candidate import Candidate
+from app.models.candidate_status_history import CandidateStatusHistory
 from app.models.user import User
 from app.schemas.interview import (
     InterviewCreate, InterviewOut, InterviewWithNames, RescheduleRequest,
@@ -264,6 +266,45 @@ def mark_complete(
 
     db.commit()
     return {"message": "Interview marked as completed"}
+
+class FinalOutcomeRequest(BaseModel):
+    outcome: str  # "accept" | "reject"
+    note: Optional[str] = None
+
+
+@router.post("/{interview_id}/final-outcome")
+def final_outcome(
+    interview_id: UUID,
+    data: FinalOutcomeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("master_admin", "admin_l2"))
+):
+    """The last step: after the interview, the candidate is accepted or rejected."""
+    if data.outcome not in ("accept", "reject"):
+        raise HTTPException(status_code=400, detail="Outcome must be 'accept' or 'reject'")
+
+    interview = db.query(Interview).filter(Interview.id == interview_id).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    candidate = db.query(Candidate).filter(Candidate.id == interview.candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    to_status = "ACCEPTED" if data.outcome == "accept" else "REJECTED"
+    db.add(CandidateStatusHistory(
+        candidate_id=candidate.id,
+        from_status=candidate.current_status,
+        to_status=to_status,
+        changed_by=current_user.id,
+        reason=data.note or f"Final decision after round {interview.round_number}",
+    ))
+    candidate.current_status = to_status
+    if interview.status != "completed":
+        interview.status = "completed"
+    db.commit()
+    return {"message": f"Candidate {to_status.lower()}"}
+
 
 @router.post("/{interview_id}/feedback", response_model=FeedbackOut)
 def submit_feedback(

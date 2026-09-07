@@ -8,7 +8,9 @@ import {
   Download, ArrowLeft, Plus, CalendarPlus, ThumbsUp, ThumbsDown,
 } from "lucide-react"
 import { Topbar } from "@/components/portal/topbar"
-import { Avatar, Card, InterviewStatusBadge, StatusBadge } from "@/components/portal/ui"
+import {
+  Avatar, Card, InterviewStatusBadge, StatusBadge, VerdictBadge, AdminActionBadge, OutcomeBadge,
+} from "@/components/portal/ui"
 import { ScheduleInterviewModal } from "@/components/portal/schedule-interview-modal"
 import { useRole } from "@/components/portal/role-context"
 import { cn } from "@/lib/utils"
@@ -31,6 +33,9 @@ interface ReviewRow {
   verdict: string | null
   notes: string | null
   submitted_at: string | null
+  admin_action: string | null
+  admin_note: string | null
+  outcome: string | null
 }
 
 export default function CandidateDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -222,20 +227,21 @@ export default function CandidateDetailPage({ params }: { params: Promise<{ id: 
                                   </p>
                                 </div>
                               </div>
-                              <span
-                                className={cn(
-                                  "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
-                                  r.verdict === "shortlist"
-                                    ? "bg-green-100 text-green-700 ring-green-200"
-                                    : "bg-red-100 text-red-700 ring-red-200",
-                                )}
-                              >
-                                {r.verdict === "shortlist"
-                                  ? <><ThumbsUp className="size-3" /> Shortlisted</>
-                                  : <><ThumbsDown className="size-3" /> Not shortlisted</>}
-                              </span>
+                              {r.verdict && <VerdictBadge verdict={r.verdict} />}
                             </div>
-                            {r.notes && <p className="mt-3 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">{r.notes}</p>}
+                            {r.notes && <p className="mt-3 rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">{r.notes}</p>}
+                            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-xs">
+                              <span className="text-muted-foreground">Admin:</span>
+                              {r.admin_action ? (
+                                <>
+                                  <AdminActionBadge action={r.admin_action} />
+                                  {r.outcome && <OutcomeBadge verdict={r.outcome} />}
+                                  {r.admin_note && <span className="text-muted-foreground">— {r.admin_note}</span>}
+                                </>
+                              ) : (
+                                <span className="text-muted-foreground">Awaiting confirmation</span>
+                              )}
+                            </div>
                           </Card>
                         ))}
                       </>

@@ -6,6 +6,7 @@ export type CvStatus =
   | "pending_assignment"
   | "assigned"
   | "under_review"
+  | "pending_decision"
   | "shortlisted"
   | "interview_scheduled"
   | "interview_done"
@@ -18,8 +19,11 @@ export type Priority = "urgent" | "high" | "normal"
 
 export type RoleKey = "master_admin" | "admin_l2" | "teacher"
 
-/** An assigned CV moves: pending → in_review (opened) → completed (scanned). */
-export type AssignmentStatus = "pending" | "in_review" | "completed"
+/**
+ * An assigned CV moves: pending → in_review (opened) → completed (scanned).
+ * "declined" is legacy — teachers can no longer decline, but old rows still exist.
+ */
+export type AssignmentStatus = "pending" | "in_review" | "completed" | "declined"
 
 export type InterviewStatus =
   | "scheduled"
@@ -64,7 +68,14 @@ export interface PortalUser {
   active: boolean
 }
 
+/** A teacher's call on a scanned CV. */
 export type Verdict = "shortlist" | "reject"
+
+/** What an admin did with that call. Overriding inverts the outcome. */
+export type AdminAction = "accepted" | "overridden"
+
+/** Where the candidate lands once the admin has acted. */
+export type DecisionOutcome = "interview" | "archive"
 
 export interface Assignment {
   id: string
@@ -78,7 +89,22 @@ export interface Assignment {
   overdue?: boolean
   assignedDate: string
   verdict?: Verdict | null
+  reasoning?: string | null
+  adminAction?: AdminAction | null
+  outcome?: DecisionOutcome | null
   completedDate?: string | null
+}
+
+/** A teacher verdict sitting on an admin's desk, awaiting accept-or-override. */
+export interface PendingReview {
+  reviewId: string
+  candidateId: string
+  candidate: string
+  subject: string
+  teacher: string
+  verdict: Verdict
+  reasoning: string
+  submittedOn: string
 }
 
 export interface Interview {
@@ -97,9 +123,10 @@ export interface Interview {
 /** The stages the candidate pipeline is charted by — counts come from the API. */
 export const pipelineStages: { stage: string; status: CvStatus }[] = [
   { stage: "Pending Assignment", status: "pending_assignment" },
-  { stage: "Assigned", status: "assigned" },
-  { stage: "Under Review", status: "under_review" },
-  { stage: "Shortlisted", status: "shortlisted" },
+  { stage: "With Teachers", status: "assigned" },
+  { stage: "Being Scanned", status: "under_review" },
+  { stage: "Awaiting Admin Decision", status: "pending_decision" },
+  { stage: "Cleared for Interview", status: "shortlisted" },
   { stage: "Interview Scheduled", status: "interview_scheduled" },
   { stage: "Interview Done", status: "interview_done" },
   { stage: "Offer Pending", status: "offer_pending" },

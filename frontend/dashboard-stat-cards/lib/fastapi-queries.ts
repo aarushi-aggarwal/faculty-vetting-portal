@@ -1,6 +1,7 @@
 import { apiGet } from "@/lib/api-client"
 import type {
   Candidate, Assignment, Interview, PortalUser, WorkloadRow, Verdict, CvStatus,
+  AdminAction, DecisionOutcome, PendingReview,
 } from "@/lib/data"
 import { pipelineStages } from "@/lib/data"
 
@@ -34,7 +35,21 @@ interface ApiAssignment {
   assigned_at: string
   completed_at: string | null
   verdict: string | null
+  reasoning: string | null
+  admin_action: string | null
+  outcome: string | null
   overdue: boolean
+}
+
+interface ApiPendingReview {
+  review_id: string
+  candidate_id: string
+  candidate_name: string
+  candidate_subject: string | null
+  teacher_name: string
+  verdict: string
+  reasoning: string | null
+  submitted_at: string | null
 }
 
 interface ApiWorkloadRow {
@@ -111,6 +126,9 @@ function mapAssignment(a: ApiAssignment): Assignment {
     overdue: a.overdue,
     assignedDate: shortDate(a.assigned_at),
     verdict: (a.verdict as Verdict) ?? null,
+    reasoning: a.reasoning ?? null,
+    adminAction: (a.admin_action as AdminAction) ?? null,
+    outcome: (a.outcome as DecisionOutcome) ?? null,
     completedDate: a.completed_at ? shortDate(a.completed_at) : null,
   }
 }
@@ -223,6 +241,26 @@ export async function getUsers(): Promise<PortalUser[]> {
   }
 }
 
+/** Teacher verdicts waiting for an admin to accept or override. */
+export async function getPendingReviews(): Promise<PendingReview[]> {
+  try {
+    const data = await apiGet<ApiPendingReview[]>("/reviews/pending")
+    return data.map((r) => ({
+      reviewId: r.review_id,
+      candidateId: r.candidate_id,
+      candidate: r.candidate_name,
+      subject: r.candidate_subject ?? "N/A",
+      teacher: r.teacher_name,
+      verdict: r.verdict as Verdict,
+      reasoning: r.reasoning ?? "",
+      submittedOn: r.submitted_at ? shortDate(r.submitted_at) : "—",
+    }))
+  } catch (err) {
+    console.error("[api] getPendingReviews error:", err)
+    return []
+  }
+}
+
 export async function getTeacherWorkload(): Promise<WorkloadRow[]> {
   try {
     const data = await apiGet<ApiWorkloadRow[]>("/users/workload")
@@ -245,10 +283,12 @@ export interface AdminDashboardData {
   pipeline: { stage: string; status: CvStatus; count: number }[]
   awaitingAssignment: number
   outForReview: number
+  /** Teacher verdicts sitting on the admin's desk. */
+  awaitingDecision: number
   shortlisted: number
   interviewsScheduled: number
   interviewsDone: number
-  /** Shortlisted candidates waiting for Admin L2 to put them up for interviews. */
+  /** Cleared candidates waiting to have an interview panel scheduled. */
   readyForInterview: Candidate[]
 }
 
@@ -275,6 +315,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     })),
     awaitingAssignment: countByStatus("UPLOADED") + countByStatus("PENDING_ASSIGNMENT"),
     outForReview: assignments.filter((a) => ["pending", "in_review"].includes(a.status)).length,
+    awaitingDecision: countByStatus("PENDING_DECISION"),
     shortlisted: countByStatus("SHORTLISTED"),
     interviewsScheduled: interviews.filter((i) => ["scheduled", "rescheduled"].includes(i.status)).length,
     interviewsDone: interviews.filter((i) => i.status === "completed").length,

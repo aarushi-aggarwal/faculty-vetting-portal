@@ -5,6 +5,26 @@ from datetime import datetime
 
 VALID_VERDICTS = ["shortlist", "reject", "flag_discussion"]
 
+# What an admin can do with a teacher's verdict.
+VALID_ADMIN_ACTIONS = ["accepted", "overridden"]
+
+
+class AdminDecisionRequest(BaseModel):
+    """Admin accepts the teacher's verdict, or overrides it (inverting the outcome)."""
+    action: str
+    note: Optional[str] = None
+
+
+class PendingReviewOut(BaseModel):
+    review_id: UUID
+    candidate_id: UUID
+    candidate_name: str
+    candidate_subject: Optional[str]
+    teacher_name: str
+    verdict: str
+    reasoning: Optional[str]
+    submitted_at: Optional[datetime]
+
 class ReviewCreate(BaseModel):
     assignment_id: UUID
     verdict: Optional[str] = None

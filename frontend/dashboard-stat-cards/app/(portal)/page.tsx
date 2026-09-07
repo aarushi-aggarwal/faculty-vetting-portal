@@ -1,20 +1,27 @@
 import Link from "next/link"
 import { cookies } from "next/headers"
 import {
-  FileText, Inbox, Search, CheckCircle2, CalendarClock,
+  FileText, Inbox, Search, CheckCircle2, CalendarClock, ClipboardCheck,
   CalendarPlus, ArrowRight, type LucideIcon,
 } from "lucide-react"
 import { Topbar } from "@/components/portal/topbar"
 import { Avatar, Card, SectionCard } from "@/components/portal/ui"
+import { FlowStrip } from "@/components/portal/flow-strip"
+import { VIEW_ROLE_COOKIE, primaryRole } from "@/components/portal/role-context"
 import { cn } from "@/lib/utils"
 import { pipelineBarColor } from "@/lib/badges"
+import type { RoleKey } from "@/lib/data"
 import {
   getAdminDashboardData, getTeacherWorkload, getMyAssignments, getMyInterviews,
 } from "@/lib/fastapi-queries"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
-async function getUserRole(token: string): Promise<string> {
+/**
+ * Which dashboard to render. Honours the topbar "viewing as" switcher, but only
+ * for roles the user genuinely holds — the cookie is never trusted on its own.
+ */
+async function resolveViewRole(token: string, requested?: string): Promise<RoleKey> {
   try {
     const res = await fetch(`${API_URL}/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -22,16 +29,24 @@ async function getUserRole(token: string): Promise<string> {
     })
     if (!res.ok) return "teacher"
     const data = await res.json()
-    const roles: string[] = (data.roles ?? []).map((r: any) => r.name)
-    if (roles.includes("master_admin")) return "master_admin"
-    if (roles.includes("admin_l2"))     return "admin_l2"
-    return "teacher"
+    const roles: RoleKey[] = (data.roles ?? []).map((r: any) => r.name as RoleKey)
+
+    if (requested && roles.includes(requested as RoleKey)) return requested as RoleKey
+    return primaryRole(roles)
   } catch {
     return "teacher"
   }
 }
 
 // ── Shared pieces ──────────────────────────────────────────────────────────────
+
+/** Muted icon tones, matching the formal palette. */
+const TONE = {
+  neutral: "bg-slate-100 text-slate-600",
+  steel:   "bg-[#e8edf2] text-[#33506a]",
+  amber:   "bg-[#f6efe0] text-[#7a5c1e]",
+  green:   "bg-[#e6efe8] text-[#2f5d40]",
+}
 
 interface StatCard {
   label: string
@@ -105,11 +120,11 @@ async function MasterAdminDashboard() {
   ])
 
   const cards: StatCard[] = [
-    { label: "Total Candidates",   value: data.totalCandidates,      icon: FileText,     tone: "bg-blue-100 text-blue-600",     href: "/candidates" },
-    { label: "Awaiting Assignment",value: data.awaitingAssignment,   icon: Inbox,        tone: "bg-amber-100 text-amber-600",   href: "/candidates?status=pending_assignment" },
-    { label: "Out for Review",     value: data.outForReview,         icon: Search,       tone: "bg-purple-100 text-purple-600", href: "/assignments" },
-    { label: "Shortlisted",        value: data.shortlisted,          icon: CheckCircle2, tone: "bg-green-100 text-green-600",   href: "/candidates?status=shortlisted" },
-    { label: "Interviews Scheduled", value: data.interviewsScheduled,icon: CalendarClock,tone: "bg-indigo-100 text-indigo-600", href: "/interviews" },
+    { label: "Total Candidates",   value: data.totalCandidates,    icon: FileText,      tone: TONE.neutral, href: "/candidates" },
+    { label: "To Assign",          value: data.awaitingAssignment, icon: Inbox,         tone: TONE.amber,   href: "/candidates?status=pending_assignment" },
+    { label: "With Teachers",      value: data.outForReview,       icon: Search,        tone: TONE.steel,   href: "/assignments" },
+    { label: "Awaiting Decision",  value: data.awaitingDecision,   icon: ClipboardCheck,tone: TONE.amber,   href: "/reviews" },
+    { label: "Interviews Scheduled", value: data.interviewsScheduled, icon: CalendarClock, tone: TONE.steel, href: "/interviews" },
   ]
 
   return (
@@ -166,20 +181,35 @@ async function AdminL2Dashboard() {
   const data = await getAdminDashboardData()
 
   const cards: StatCard[] = [
-    { label: "To Assign",      value: data.awaitingAssignment,   icon: Inbox,        tone: "bg-amber-100 text-amber-600",   href: "/candidates?status=pending_assignment" },
-    { label: "Out for Review", value: data.outForReview,         icon: Search,       tone: "bg-purple-100 text-purple-600", href: "/assignments" },
-    { label: "Shortlisted",    value: data.shortlisted,          icon: CheckCircle2, tone: "bg-green-100 text-green-600",   href: "/candidates?status=shortlisted" },
-    { label: "Interviews Scheduled", value: data.interviewsScheduled, icon: CalendarClock, tone: "bg-indigo-100 text-indigo-600", href: "/interviews" },
+    { label: "To Assign",         value: data.awaitingAssignment, icon: Inbox,         tone: TONE.amber, href: "/candidates?status=pending_assignment" },
+    { label: "With Teachers",     value: data.outForReview,       icon: Search,        tone: TONE.steel, href: "/assignments" },
+    { label: "Awaiting Decision", value: data.awaitingDecision,   icon: ClipboardCheck,tone: TONE.amber, href: "/reviews" },
+    { label: "To Schedule",       value: data.shortlisted,        icon: CheckCircle2,  tone: TONE.green, href: "/interviews" },
   ]
 
   return (
     <>
       <Topbar title="Dashboard" showDate />
       <div className="space-y-6 p-6">
+        <FlowStrip active="assign" />
         <StatCards cards={cards} />
 
+        {data.awaitingDecision > 0 && (
+          <Link href="/reviews" className="block">
+            <Card className="flex items-center gap-3 border-l-4 border-l-[#b99b53] p-4 transition-shadow hover:shadow-md">
+              <ClipboardCheck className="size-5 shrink-0 text-[#7a5c1e]" />
+              <p className="flex-1 text-sm">
+                <span className="font-semibold">{data.awaitingDecision}</span>{" "}
+                {data.awaitingDecision === 1 ? "teacher verdict is" : "teacher verdicts are"} waiting
+                for you to accept or override.
+              </p>
+              <ArrowRight className="size-4 text-muted-foreground" />
+            </Card>
+          </Link>
+        )}
+
         <SectionCard
-          title="Shortlisted — ready for interviews"
+          title="Cleared for interview — ready to schedule"
           action={
             <Link href="/candidates?status=shortlisted" className="text-xs font-medium text-brand hover:underline">
               View all
@@ -188,7 +218,7 @@ async function AdminL2Dashboard() {
         >
           {data.readyForInterview.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-              Nothing shortlisted yet — teachers send CVs back here once they have scanned them.
+              Nothing cleared yet — candidates arrive here once you confirm a teacher's verdict.
             </p>
           ) : (
             <ul className="divide-y divide-border">
@@ -230,15 +260,16 @@ async function TeacherDashboard() {
   const upcoming = interviews.filter((i) => ["scheduled", "rescheduled"].includes(i.status))
 
   const cards: StatCard[] = [
-    { label: "CVs to Scan",         value: toReview.length,  icon: Inbox,         tone: "bg-amber-100 text-amber-600", href: "/my-queue" },
-    { label: "Scanned",             value: scanned.length,   icon: CheckCircle2,  tone: "bg-green-100 text-green-600", href: "/my-queue?tab=history" },
-    { label: "Upcoming Interviews", value: upcoming.length,  icon: CalendarClock, tone: "bg-blue-100 text-blue-600",   href: "/my-interviews" },
+    { label: "CVs to Scan",         value: toReview.length, icon: Inbox,        tone: TONE.amber, href: "/my-queue" },
+    { label: "Scanned",             value: scanned.length,  icon: CheckCircle2, tone: TONE.green, href: "/my-queue?tab=history" },
+    { label: "Upcoming Interviews", value: upcoming.length, icon: CalendarClock,tone: TONE.steel, href: "/my-interviews" },
   ]
 
   return (
     <>
       <Topbar title="Dashboard" showDate />
       <div className="space-y-6 p-6">
+        <FlowStrip active="scan" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {cards.map((s) => {
             const Icon = s.icon
@@ -325,7 +356,8 @@ async function TeacherDashboard() {
 export default async function DashboardPage() {
   const cookieStore = await cookies()
   const token = cookieStore.get("portal_token")?.value ?? ""
-  const role = await getUserRole(token)
+  const requested = cookieStore.get(VIEW_ROLE_COOKIE)?.value
+  const role = await resolveViewRole(token, requested)
 
   if (role === "master_admin") return <MasterAdminDashboard />
   if (role === "admin_l2")     return <AdminL2Dashboard />

@@ -1,13 +1,17 @@
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import {
+  adminActionConfig,
   assignmentStatusConfig,
+  fallbackBadge,
   initials,
   interviewStatusConfig,
   outcomeConfig,
   priorityConfig,
   roleConfig,
   statusConfig,
+  verdictConfig,
+  type BadgeStyle,
 } from "@/lib/badges"
 import type {
   AssignmentStatus,
@@ -18,37 +22,47 @@ import type {
 } from "@/lib/data"
 
 const badgeBase =
-  "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap"
+  "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap"
+
+/**
+ * Badge values come from the database, which can hold statuses this build has no
+ * styling for (legacy rows, a newer backend). Fall back rather than crashing the page.
+ */
+function Badge({ style, fallbackLabel }: { style?: BadgeStyle; fallbackLabel?: string }) {
+  const c = style ?? { ...fallbackBadge, label: fallbackLabel ?? fallbackBadge.label }
+  return <span className={cn(badgeBase, c.className)}>{c.label}</span>
+}
 
 export function StatusBadge({ status }: { status: CvStatus }) {
-  const c = statusConfig[status]
-  return <span className={cn(badgeBase, c.className)}>{c.label}</span>
+  return <Badge style={statusConfig[status]} fallbackLabel={status} />
 }
 
 export function PriorityBadge({ priority }: { priority: Priority }) {
-  const c = priorityConfig[priority]
-  return <span className={cn(badgeBase, c.className)}>{c.label}</span>
+  return <Badge style={priorityConfig[priority]} fallbackLabel={priority} />
 }
 
 export function RoleBadge({ role }: { role: RoleKey }) {
-  const c = roleConfig[role]
-  return <span className={cn(badgeBase, c.className)}>{c.label}</span>
+  return <Badge style={roleConfig[role]} fallbackLabel={role} />
 }
 
 export function AssignmentStatusBadge({ status }: { status: AssignmentStatus }) {
-  const c = assignmentStatusConfig[status]
-  return <span className={cn(badgeBase, c.className)}>{c.label}</span>
+  return <Badge style={assignmentStatusConfig[status]} fallbackLabel={status} />
 }
 
 export function InterviewStatusBadge({ status }: { status: InterviewStatus }) {
-  const c = interviewStatusConfig[status]
-  return <span className={cn(badgeBase, c.className)}>{c.label}</span>
+  return <Badge style={interviewStatusConfig[status]} fallbackLabel={status} />
+}
+
+export function VerdictBadge({ verdict }: { verdict: string }) {
+  return <Badge style={verdictConfig[verdict]} fallbackLabel={verdict} />
+}
+
+export function AdminActionBadge({ action }: { action: string }) {
+  return <Badge style={adminActionConfig[action]} fallbackLabel={action} />
 }
 
 export function OutcomeBadge({ verdict }: { verdict: string }) {
-  const c = outcomeConfig[verdict]
-  if (!c) return null
-  return <span className={cn(badgeBase, c.className)}>{c.label}</span>
+  return <Badge style={outcomeConfig[verdict]} fallbackLabel={verdict} />
 }
 
 export function Avatar({

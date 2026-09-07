@@ -17,6 +17,22 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def grant_teacher_role(db: Session, user: User, granted_by=None) -> bool:
+    """Give a user the teacher role if they don't already have it. Caller commits."""
+    teacher = db.query(Role).filter(Role.name == "teacher").first()
+    if not teacher:
+        return False
+    already = db.query(UserRole).filter(
+        UserRole.user_id == user.id,
+        UserRole.role_id == teacher.id,
+        UserRole.revoked_at == None,
+    ).first()
+    if already:
+        return False
+    db.add(UserRole(user_id=user.id, role_id=teacher.id, granted_by=granted_by))
+    return True
+
+
 def _user_with_roles(u: User, db: Session) -> UserWithRoles:
     roles = (
         db.query(Role.name)
@@ -139,6 +155,11 @@ def assign_role(
         raise HTTPException(status_code=400, detail="Role already assigned")
 
     db.add(UserRole(user_id=data.user_id, role_id=role.id, granted_by=current_user.id))
+
+    # Admins are teachers too — they can be put on review queues and interview panels.
+    if data.role_name in ("master_admin", "admin_l2"):
+        grant_teacher_role(db, user, granted_by=current_user.id)
+
     db.commit()
     return {"message": f"Role '{data.role_name}' assigned"}
 

@@ -9,11 +9,30 @@ from app.models.review import Review
 from app.models.review_comment import ReviewComment
 from app.models.assignment import Assignment
 from app.models.candidate import Candidate
+from app.models.candidate_status_history import CandidateStatusHistory
 from app.models.user import User
-from app.schemas.review import ReviewCreate, ReviewOut, CommentCreate, CommentOut, VALID_VERDICTS
+from app.schemas.review import (
+    ReviewCreate, ReviewOut, CommentCreate, CommentOut, VALID_VERDICTS,
+    AdminDecisionRequest, PendingReviewOut, VALID_ADMIN_ACTIONS,
+)
 from app.core.dependencies import require_role, get_current_user
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
+
+
+def effective_outcome(verdict: str, action: str) -> str:
+    """
+    Accepting follows the teacher; overriding inverts them.
+
+        shortlist  + accepted   -> interview
+        reject     + overridden -> interview
+        reject     + accepted   -> archive
+        shortlist  + overridden -> archive
+    """
+    shortlisted = verdict == "shortlist"
+    if action == "overridden":
+        shortlisted = not shortlisted
+    return "interview" if shortlisted else "archive"
 
 @router.post("/", response_model=ReviewOut)
 def create_or_update_review(
@@ -91,6 +110,99 @@ def submit_review(
     db.refresh(review)
     return review
 
+@router.get("/pending", response_model=List[PendingReviewOut])
+def pending_decisions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("master_admin", "admin_l2"))
+):
+    """
+    Teacher verdicts waiting for an admin to accept or override.
+
+    Scoped to candidates actually sitting at PENDING_DECISION — a candidate who has
+    already moved on (or predates this flow) must not be re-decided, which would
+    drag their status backwards.
+    """
+    rows = (
+        db.query(Review, Candidate, User.full_name)
+        .join(Assignment, Assignment.id == Review.assignment_id)
+        .join(Candidate, Candidate.id == Assignment.candidate_id)
+        .join(User, User.id == Review.reviewer_id)
+        .filter(
+            Review.is_final == True,
+            Review.admin_action == None,
+            Candidate.current_status == "PENDING_DECISION",
+            Candidate.deleted_at == None,
+        )
+        .order_by(Review.submitted_at.asc())
+        .all()
+    )
+    return [
+        PendingReviewOut(
+            review_id=r.id,
+            candidate_id=c.id,
+            candidate_name=c.full_name,
+            candidate_subject=c.preferred_subject,
+            teacher_name=tname,
+            verdict=r.verdict,
+            reasoning=r.recommendation,
+            submitted_at=r.submitted_at,
+        )
+        for r, c, tname in rows
+    ]
+
+
+@router.post("/{review_id}/admin-decision")
+def admin_decision(
+    review_id: UUID,
+    data: AdminDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("master_admin", "admin_l2"))
+):
+    """
+    Admin accepts or overrides a teacher's verdict. The result either clears the
+    candidate for interview scheduling, or archives them.
+    """
+    if data.action not in VALID_ADMIN_ACTIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid action. Choose from {VALID_ADMIN_ACTIONS}")
+
+    review = db.query(Review).filter(Review.id == review_id, Review.is_final == True).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    if review.admin_action:
+        raise HTTPException(status_code=400, detail="This review has already been decided")
+
+    assignment = db.query(Assignment).filter(Assignment.id == review.assignment_id).first()
+    candidate = db.query(Candidate).filter(Candidate.id == assignment.candidate_id).first()
+    if candidate and candidate.current_status != "PENDING_DECISION":
+        raise HTTPException(
+            status_code=400,
+            detail=f"This candidate has already moved on (currently {candidate.current_status})",
+        )
+
+    review.admin_action = data.action
+    review.admin_action_by = current_user.id
+    review.admin_action_at = datetime.utcnow()
+    review.admin_note = data.note
+
+    outcome = effective_outcome(review.verdict, data.action)
+    if candidate:
+        to_status = "SHORTLISTED" if outcome == "interview" else "ON_HOLD"
+        db.add(CandidateStatusHistory(
+            candidate_id=candidate.id,
+            from_status=candidate.current_status,
+            to_status=to_status,
+            changed_by=current_user.id,
+            reason=data.note or f"Teacher verdict '{review.verdict}' {data.action} by admin",
+        ))
+        candidate.current_status = to_status
+
+    db.commit()
+    return {
+        "message": "Cleared for interview" if outcome == "interview" else "Archived",
+        "outcome": outcome,
+    }
+
+
 @router.get("/assignment/{assignment_id}", response_model=List[ReviewOut])
 def get_reviews_for_assignment(
     assignment_id: UUID,
@@ -131,6 +243,9 @@ def get_candidate_review_summary(
                 "verdict": r.verdict,
                 "notes": r.recommendation,
                 "submitted_at": r.submitted_at,
+                "admin_action": r.admin_action,
+                "admin_note": r.admin_note,
+                "outcome": effective_outcome(r.verdict, r.admin_action) if r.admin_action else None,
             } for r, name in rows
         ]
     }

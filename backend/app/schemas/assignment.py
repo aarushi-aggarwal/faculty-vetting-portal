@@ -34,7 +34,8 @@ class ReassignRequest(BaseModel):
 
 class DecisionRequest(BaseModel):
     verdict: str
-    notes: Optional[str] = None
+    # Reasoning is mandatory — the admin judges the teacher's verdict on it.
+    notes: str
 
 class AssignmentWithNames(BaseModel):
     id: UUID
@@ -49,4 +50,8 @@ class AssignmentWithNames(BaseModel):
     assigned_at: datetime
     completed_at: Optional[datetime] = None
     verdict: Optional[str] = None
+    reasoning: Optional[str] = None
+    # What the admin did with this teacher's verdict, once they have acted.
+    admin_action: Optional[str] = None
+    outcome: Optional[str] = None
     overdue: bool

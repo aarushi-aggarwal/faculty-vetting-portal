@@ -15,37 +15,45 @@ from app.schemas.assignment import (
     ReassignRequest, DecisionRequest, VALID_VERDICTS,
 )
 from app.core.dependencies import require_role
+from app.api.routes.reviews import effective_outcome
 
 router = APIRouter(prefix="/assignments", tags=["assignments"])
 
 
-def _verdicts_for(db: Session, assignments) -> Dict[UUID, str]:
-    """Map assignment_id -> final verdict, for assignments that have been decided."""
+def _reviews_for(db: Session, assignments) -> Dict[UUID, Review]:
+    """Map assignment_id -> its final review, for assignments that have been scanned."""
     ids = [a.id for a in assignments]
     if not ids:
         return {}
     rows = (
-        db.query(Review.assignment_id, Review.verdict)
+        db.query(Review)
         .filter(Review.assignment_id.in_(ids), Review.is_final == True)
         .all()
     )
-    return {aid: verdict for aid, verdict in rows}
+    return {r.assignment_id: r for r in rows}
 
 
-def _map_row(a, cname, csubj, tname, verdict=None) -> AssignmentWithNames:
+def _map_row(a, cname, csubj, tname, review=None) -> AssignmentWithNames:
     today = datetime.utcnow().date()
+    outcome = None
+    if review is not None and review.admin_action:
+        outcome = effective_outcome(review.verdict, review.admin_action)
     return AssignmentWithNames(
         id=a.id, candidate_id=a.candidate_id, candidate_name=cname,
         candidate_subject=csubj, teacher_id=a.teacher_id, teacher_name=tname,
         priority=a.priority, status=a.status, due_date=a.due_date,
-        assigned_at=a.assigned_at, completed_at=a.completed_at, verdict=verdict,
+        assigned_at=a.assigned_at, completed_at=a.completed_at,
+        verdict=review.verdict if review is not None else None,
+        reasoning=review.recommendation if review is not None else None,
+        admin_action=review.admin_action if review is not None else None,
+        outcome=outcome,
         overdue=bool(a.due_date and a.due_date < today and a.status not in ("completed", "reassigned")),
     )
 
 
 def _rows_to_out(db: Session, rows) -> List[AssignmentWithNames]:
-    verdicts = _verdicts_for(db, [r[0] for r in rows])
-    return [_map_row(a, cn, cs, tn, verdicts.get(a.id)) for a, cn, cs, tn in rows]
+    reviews = _reviews_for(db, [r[0] for r in rows])
+    return [_map_row(a, cn, cs, tn, reviews.get(a.id)) for a, cn, cs, tn in rows]
 
 
 # /my must come before /{assignment_id} to avoid routing conflicts
@@ -156,9 +164,15 @@ def record_decision(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("master_admin", "admin_l2", "teacher")),
 ):
-    """Teacher scans an assigned CV and decides: shortlist for interview, or reject."""
+    """
+    Teacher scans an assigned CV and records a verdict with reasoning.
+    The verdict does NOT decide the candidate — it goes to an admin, who either
+    accepts it or overrides it (see POST /reviews/{id}/admin-decision).
+    """
     if data.verdict not in VALID_VERDICTS:
         raise HTTPException(status_code=400, detail=f"Invalid verdict. Choose from {VALID_VERDICTS}")
+    if not data.notes or not data.notes.strip():
+        raise HTTPException(status_code=400, detail="Please explain your reasoning")
 
     a = db.query(Assignment).filter(
         Assignment.id == assignment_id, Assignment.teacher_id == current_user.id
@@ -171,30 +185,21 @@ def record_decision(
     now = datetime.utcnow()
     db.add(Review(
         assignment_id=a.id, reviewer_id=current_user.id,
-        verdict=data.verdict, recommendation=data.notes,
+        verdict=data.verdict, recommendation=data.notes.strip(),
         is_final=True, submitted_at=now,
     ))
     a.status = "completed"
     a.completed_at = now
 
+    # Candidate now waits on an admin to accept or override the teacher's call.
     candidate = db.query(Candidate).filter(Candidate.id == a.candidate_id).first()
-    if candidate:
-        if data.verdict == "shortlist":
-            # Shortlisted CVs go back to Admin L2 to be put up for interviews.
-            if candidate.current_status in ("UPLOADED", "PENDING_ASSIGNMENT", "ASSIGNED", "UNDER_REVIEW"):
-                candidate.current_status = "SHORTLISTED"
-        else:
-            # Only reject once nobody else is still scanning this candidate.
-            others_open = db.query(Assignment).filter(
-                Assignment.candidate_id == a.candidate_id,
-                Assignment.id != a.id,
-                Assignment.status.notin_(["completed", "reassigned"]),
-            ).count()
-            if not others_open and candidate.current_status in ("ASSIGNED", "UNDER_REVIEW"):
-                candidate.current_status = "REJECTED"
+    if candidate and candidate.current_status in (
+        "UPLOADED", "PENDING_ASSIGNMENT", "ASSIGNED", "UNDER_REVIEW"
+    ):
+        candidate.current_status = "PENDING_DECISION"
 
     db.commit()
-    return {"message": f"Recorded as {data.verdict}"}
+    return {"message": "Sent to admin for confirmation"}
 
 
 @router.patch("/{assignment_id}/reassign")

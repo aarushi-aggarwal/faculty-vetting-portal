@@ -5,7 +5,9 @@ from datetime import datetime
 
 VALID_STATUSES = [
     "UPLOADED", "PENDING_ASSIGNMENT", "ASSIGNED", "UNDER_REVIEW",
-    "SHORTLISTED", "INTERVIEW_SCHEDULED", "INTERVIEW_DONE",
+    "PENDING_DECISION",          # teacher has scanned it; waiting on an admin
+    "SHORTLISTED",               # admin cleared it for interview
+    "INTERVIEW_SCHEDULED", "INTERVIEW_DONE",
     "OFFER_PENDING", "ACCEPTED", "REJECTED", "ON_HOLD"
 ]
 

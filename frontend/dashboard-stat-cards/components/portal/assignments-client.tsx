@@ -3,7 +3,9 @@
 import { useMemo, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Search, X, RefreshCw, UserPlus, Plus, Loader2 } from "lucide-react"
-import { Avatar, AssignmentStatusBadge, Card, PriorityBadge } from "./ui"
+import {
+  Avatar, AssignmentStatusBadge, Card, PriorityBadge, VerdictBadge, AdminActionBadge,
+} from "./ui"
 import { cn } from "@/lib/utils"
 import { initials } from "@/lib/badges"
 import type { Assignment, AssignmentStatus, Candidate, Priority } from "@/lib/data"
@@ -344,14 +346,12 @@ export function AssignmentsClient({
                     <td className="px-3 py-3"><AssignmentStatusBadge status={a.status} /></td>
                     <td className="px-3 py-3">
                       {a.verdict ? (
-                        <span className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
-                          a.verdict === "shortlist"
-                            ? "bg-green-100 text-green-700 ring-green-200"
-                            : "bg-red-100 text-red-700 ring-red-200",
-                        )}>
-                          {a.verdict === "shortlist" ? "Shortlisted" : "Not shortlisted"}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <VerdictBadge verdict={a.verdict} />
+                          {a.adminAction
+                            ? <AdminActionBadge action={a.adminAction} />
+                            : <span className="text-xs text-muted-foreground">awaiting admin</span>}
+                        </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}

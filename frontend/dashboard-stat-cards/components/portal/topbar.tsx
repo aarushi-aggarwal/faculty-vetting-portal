@@ -23,7 +23,10 @@ export function Topbar({
   showDate?: boolean
 }) {
   const { role, setRole, user } = useRole()
-  const isMasterAdmin = user.roles.includes("master_admin")
+
+  // Anyone holding more than one role can switch between those views.
+  const availableRoles = roleOptions.filter((o) => user.roles.includes(o.key))
+  const showSwitcher = availableRoles.length > 1
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -40,24 +43,27 @@ export function Topbar({
       <div className="flex items-center gap-3">
         {actions}
 
-        {/* Role switcher — master_admin only */}
-        {isMasterAdmin && (
-          <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5">
-            {roleOptions.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setRole(opt.key)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                  role === opt.key
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
+        {/* View-as switcher — shown to anyone holding more than one role */}
+        {showSwitcher && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Viewing as</span>
+            <div className="flex items-center rounded-md border border-border bg-muted/50 p-0.5">
+              {availableRoles.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setRole(opt.key)}
+                  className={cn(
+                    "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                    role === opt.key
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

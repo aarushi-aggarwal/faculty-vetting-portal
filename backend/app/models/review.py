@@ -18,5 +18,13 @@ class Review(Base):
     overall_score = Column(Numeric(3, 1), nullable=True)
     is_final = Column(Boolean, default=False)
     submitted_at = Column(DateTime, nullable=True)
+
+    # Admin response to the teacher's verdict: "accepted" keeps it, "overridden" inverts it.
+    # NULL means the review is still waiting on an admin.
+    admin_action = Column(String(20), nullable=True)
+    admin_action_by = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    admin_action_at = Column(DateTime, nullable=True)
+    admin_note = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
