@@ -3,7 +3,10 @@
 import { useState } from "react"
 import { Search, X, ShieldPlus, ShieldMinus, Power, Loader2, CheckCircle2 } from "lucide-react"
 import { Avatar, Card, RoleBadge } from "./ui"
+import { useSortableRows, SortableTh } from "./sortable"
 import type { PortalUser, RoleKey } from "@/lib/data"
+
+type SortKey = "name" | "email" | "active"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -14,7 +17,7 @@ function getToken() {
 
 const ALL_ROLES: { key: RoleKey; label: string }[] = [
   { key: "master_admin", label: "Master Admin" },
-  { key: "admin_l2",     label: "Admin L2" },
+  { key: "admin_l2",     label: "Admin Level 2" },
   { key: "teacher",      label: "Teacher" },
 ]
 
@@ -27,6 +30,16 @@ export function UsersClient({ users }: { users: PortalUser[] }) {
 
   const filtered = localUsers.filter(
     (u) => u.name.toLowerCase().includes(query.toLowerCase()) || u.email.toLowerCase().includes(query.toLowerCase())
+  )
+
+  const { sorted, sortKey, sortDir, toggleSort } = useSortableRows<PortalUser, SortKey>(
+    filtered,
+    {
+      name: (u) => u.name.toLowerCase(),
+      email: (u) => u.email.toLowerCase(),
+      active: (u) => (u.active ? 0 : 1),
+    },
+    { key: "name", dir: "asc" },
   )
 
   function flash(text: string, ok: boolean) {
@@ -113,14 +126,14 @@ export function UsersClient({ users }: { users: PortalUser[] }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-5 py-3 font-medium">User</th>
-                  <th className="px-3 py-3 font-medium">Email</th>
+                  <SortableTh label="User" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Email" sortKey="email" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-3 font-medium">Roles</th>
-                  <th className="px-3 py-3 font-medium">Status</th>
+                  <SortableTh label="Status" sortKey="active" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((u) => (
+                {sorted.map((u) => (
                   <tr key={u.id} onClick={() => setSelected(u)} className="cursor-pointer hover:bg-muted/40">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">

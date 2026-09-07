@@ -22,13 +22,17 @@ router = APIRouter(prefix="/reviews", tags=["reviews"])
 
 def effective_outcome(verdict: str, action: str) -> str:
     """
-    Accepting follows the teacher; overriding inverts them.
+    Accepting follows the teacher; reverting inverts them; reassigning leaves the
+    candidate's fate undecided (routed to another teacher instead).
 
         shortlist  + accepted   -> interview
         reject     + overridden -> interview
         reject     + accepted   -> archive
         shortlist  + overridden -> archive
+        (either)   + reassigned -> reassigned
     """
+    if action == "reassigned":
+        return "reassigned"
     shortlisted = verdict == "shortlist"
     if action == "overridden":
         shortlisted = not shortlisted
@@ -159,8 +163,9 @@ def admin_decision(
     current_user: User = Depends(require_role("master_admin", "admin_l2"))
 ):
     """
-    Admin accepts or overrides a teacher's verdict. The result either clears the
-    candidate for interview scheduling, or archives them.
+    Admin accepts, reverts, or reassigns a teacher's decision.
+    Accept/revert either clears the candidate for interview scheduling or archives
+    them. Reassign leaves the decision open and sends the CV to another teacher.
     """
     if data.action not in VALID_ADMIN_ACTIONS:
         raise HTTPException(status_code=400, detail=f"Invalid action. Choose from {VALID_ADMIN_ACTIONS}")
@@ -179,6 +184,36 @@ def admin_decision(
             detail=f"This candidate has already moved on (currently {candidate.current_status})",
         )
 
+    if data.action == "reassigned":
+        if not data.new_teacher_id:
+            raise HTTPException(status_code=400, detail="new_teacher_id is required to reassign")
+        new_teacher = db.query(User).filter(User.id == data.new_teacher_id).first()
+        if not new_teacher:
+            raise HTTPException(status_code=404, detail="Teacher not found")
+
+        review.admin_action = "reassigned"
+        review.admin_action_by = current_user.id
+        review.admin_action_at = datetime.utcnow()
+        review.admin_note = data.note
+
+        db.add(Assignment(
+            cv_id=assignment.cv_id, candidate_id=assignment.candidate_id,
+            teacher_id=data.new_teacher_id, assigned_by=current_user.id,
+            priority=assignment.priority,
+        ))
+        if candidate:
+            db.add(CandidateStatusHistory(
+                candidate_id=candidate.id,
+                from_status=candidate.current_status,
+                to_status="ASSIGNED",
+                changed_by=current_user.id,
+                reason=data.note or f"Reassigned to {new_teacher.full_name} for a fresh opinion",
+            ))
+            candidate.current_status = "ASSIGNED"
+
+        db.commit()
+        return {"message": f"Reassigned to {new_teacher.full_name}", "outcome": "reassigned"}
+
     review.admin_action = data.action
     review.admin_action_by = current_user.id
     review.admin_action_at = datetime.utcnow()
@@ -192,7 +227,7 @@ def admin_decision(
             from_status=candidate.current_status,
             to_status=to_status,
             changed_by=current_user.id,
-            reason=data.note or f"Teacher verdict '{review.verdict}' {data.action} by admin",
+            reason=data.note or f"Teacher decision '{review.verdict}' {data.action} by admin",
         ))
         candidate.current_status = to_status
 
@@ -239,6 +274,7 @@ def get_candidate_review_summary(
         },
         "reviews": [
             {
+                "review_id": r.id,
                 "reviewer_name": name,
                 "verdict": r.verdict,
                 "notes": r.recommendation,

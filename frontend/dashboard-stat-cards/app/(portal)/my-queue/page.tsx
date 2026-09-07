@@ -12,7 +12,7 @@ export default async function MyQueuePage({
 
   return (
     <>
-      <Topbar title="My Queue" subtitle="Scan assigned CVs and give your verdict with reasoning" />
+      <Topbar title="My Queue" subtitle="Scan assigned CVs and give your decision with reasoning" />
       <MyQueueClient
         assignments={assignments}
         initialTab={params.tab === "history" ? "history" : "queue"}

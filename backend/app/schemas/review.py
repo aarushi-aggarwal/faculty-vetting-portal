@@ -5,14 +5,18 @@ from datetime import datetime
 
 VALID_VERDICTS = ["shortlist", "reject", "flag_discussion"]
 
-# What an admin can do with a teacher's verdict.
-VALID_ADMIN_ACTIONS = ["accepted", "overridden"]
+# What an admin can do with a teacher's decision.
+#   accepted   - follow the teacher's call
+#   overridden - invert it (shortlist -> archive, reject -> interview)
+#   reassigned - send the CV to a different teacher for a fresh opinion
+VALID_ADMIN_ACTIONS = ["accepted", "overridden", "reassigned"]
 
 
 class AdminDecisionRequest(BaseModel):
-    """Admin accepts the teacher's verdict, or overrides it (inverting the outcome)."""
+    """Admin accepts, reverts (inverts), or reassigns a teacher's decision."""
     action: str
     note: Optional[str] = None
+    new_teacher_id: Optional[UUID] = None  # required when action == "reassigned"
 
 
 class PendingReviewOut(BaseModel):

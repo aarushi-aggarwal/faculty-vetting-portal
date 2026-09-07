@@ -4,8 +4,12 @@ import { useState } from "react"
 import Link from "next/link"
 import { ExternalLink, Loader2, ThumbsUp, ThumbsDown, X, Clock } from "lucide-react"
 import { Avatar, Card, PriorityBadge, VerdictBadge, AdminActionBadge, OutcomeBadge } from "./ui"
+import { useSortableRows, SortableTh } from "./sortable"
 import { cn } from "@/lib/utils"
 import type { Assignment, Verdict } from "@/lib/data"
+
+type SortKey = "candidate" | "subject" | "priority" | "dueDate"
+const priorityRank: Record<string, number> = { urgent: 0, high: 1, normal: 2 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
@@ -86,7 +90,7 @@ function DecisionModal({
           className="mb-2 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand"
         />
         <p className="mb-4 text-xs text-muted-foreground">
-          An admin reviews your verdict and reasoning before the candidate moves on.
+          An admin reviews your decision and reasoning before the candidate moves on.
         </p>
 
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -117,7 +121,17 @@ export function MyQueueClient({
 
   const queue   = rows.filter((a) => a.status !== "completed")
   const history = rows.filter((a) => a.status === "completed")
-  const visible = tab === "queue" ? queue : history
+
+  const { sorted: sortedQueue, sortKey, sortDir, toggleSort } = useSortableRows<Assignment, SortKey>(
+    queue,
+    {
+      candidate: (a) => a.candidate.toLowerCase(),
+      subject: (a) => (a.subject ?? "").toLowerCase(),
+      priority: (a) => priorityRank[a.priority] ?? 99,
+      dueDate: (a) => (a.dueDate === "N/A" ? null : new Date(a.dueDate)),
+    },
+    { key: "dueDate", dir: "asc" },
+  )
 
   /** Opening a CV moves the assignment to "In Review" so admins can see progress. */
   function markOpened(id: string) {
@@ -164,15 +178,15 @@ export function MyQueueClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-5 py-3 font-medium">Candidate</th>
-                    <th className="px-3 py-3 font-medium">Subject</th>
-                    <th className="px-3 py-3 font-medium">Priority</th>
-                    <th className="px-3 py-3 font-medium">Due Date</th>
+                    <SortableTh label="Candidate" sortKey="candidate" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortableTh label="Subject" sortKey="subject" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortableTh label="Priority" sortKey="priority" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                    <SortableTh label="Due Date" sortKey="dueDate" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                     <th className="px-5 py-3 text-right font-medium">Your decision</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {queue.map((a) => (
+                  {sortedQueue.map((a) => (
                     <tr key={a.id} className="hover:bg-muted/40">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">

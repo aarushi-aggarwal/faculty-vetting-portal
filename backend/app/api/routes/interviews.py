@@ -14,7 +14,7 @@ from app.models.candidate_status_history import CandidateStatusHistory
 from app.models.user import User
 from app.schemas.interview import (
     InterviewCreate, InterviewOut, InterviewWithNames, RescheduleRequest,
-    FeedbackCreate, FeedbackOut, VALID_OUTCOMES
+    FeedbackCreate, FeedbackOut, VALID_OUTCOMES, PanelMemberOut,
 )
 from app.core.dependencies import require_role, get_current_user
 from app.core.calendar import create_interview_event, update_interview_event
@@ -24,18 +24,32 @@ router = APIRouter(prefix="/interviews", tags=["interviews"])
 
 
 def _panels_for(db: Session, interview_ids):
-    """Map interview_id -> list of panel member names."""
+    """Map interview_id -> list of panel members, each with their role and (once
+    submitted) their final feedback outcome — proceed/hold/reject."""
     if not interview_ids:
         return {}
+
+    outcomes = {
+        (fid, uid): outcome for fid, uid, outcome in (
+            db.query(InterviewFeedback.interview_id, InterviewFeedback.interviewer_id, InterviewFeedback.outcome)
+            .filter(InterviewFeedback.interview_id.in_(interview_ids), InterviewFeedback.is_final == True)
+            .all()
+        )
+    }
+
     rows = (
-        db.query(InterviewParticipant.interview_id, User.full_name)
+        db.query(InterviewParticipant.interview_id, InterviewParticipant.user_id,
+                  InterviewParticipant.role, User.full_name)
         .join(User, User.id == InterviewParticipant.user_id)
         .filter(InterviewParticipant.interview_id.in_(interview_ids))
         .all()
     )
-    panels = {}
-    for iid, name in rows:
-        panels.setdefault(iid, []).append(name)
+    panels: dict = {}
+    for iid, uid, role, name in rows:
+        panels.setdefault(iid, []).append(PanelMemberOut(
+            user_id=uid, name=name, role=role or "co_interviewer",
+            outcome=outcomes.get((iid, uid)),
+        ))
     return panels
 
 

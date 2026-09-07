@@ -82,25 +82,42 @@ export const interviewStatusConfig: Record<InterviewStatus, BadgeStyle & { accen
   rescheduled: { label: "Rescheduled", className: AMBER, accent: "border-l-[#b99b53]" },
 }
 
-/** A teacher's verdict on a scanned CV. */
+/** A teacher's decision on a scanned CV. */
 export const verdictConfig: Record<string, BadgeStyle> = {
-  shortlist: { label: "Shortlisted", className: GREEN },
-  reject:    { label: "Not shortlisted", className: RED },
+  shortlist: { label: "Shortlist", className: GREEN },
+  reject:    { label: "Reject", className: RED },
 }
 
-/** What the admin did with that verdict. */
+/** What the admin did with that decision. */
 export const adminActionConfig: Record<string, BadgeStyle> = {
   accepted:   { label: "Accepted", className: GREEN },
-  overridden: { label: "Overridden", className: AMBER },
+  overridden: { label: "Reverted", className: AMBER },
+  reassigned: { label: "Reassigned", className: STEEL },
 }
 
 /** Where the candidate ended up once the admin acted. */
 export const outcomeConfig: Record<string, BadgeStyle> = {
-  interview: { label: "To interview", className: GREEN },
-  archive:   { label: "Archived", className: STONE },
-  proceed:   { label: "Proceed", className: GREEN },
-  hold:      { label: "Hold", className: AMBER },
-  reject:    { label: "Reject", className: RED },
+  interview:  { label: "To interview", className: GREEN },
+  archive:    { label: "Archived", className: STONE },
+  reassigned: { label: "Sent to another teacher", className: STEEL },
+  proceed:    { label: "Proceed", className: GREEN },
+  hold:       { label: "Hold", className: AMBER },
+  reject:     { label: "Reject", className: RED },
+}
+
+/** Panel member role, shown as a small chip next to their name. */
+export const participantRoleConfig: Record<string, BadgeStyle> = {
+  lead:           { label: "Lead", className: STEEL },
+  co_interviewer: { label: "Co-interviewer", className: NEUTRAL },
+  observer:       { label: "Observer", className: STONE },
+}
+
+/** Styling for the Candidates table's Action Needed column — amber when it
+ * needs an admin's attention right now, gray once the candidate is closed out. */
+export function actionNeededClassName(label: string, highlight: boolean): string {
+  if (highlight) return AMBER
+  if (label === "Closed" || label === "Archived") return STONE
+  return NEUTRAL
 }
 
 export function initials(name: string): string {

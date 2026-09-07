@@ -5,10 +5,17 @@ from datetime import datetime
 
 VALID_OUTCOMES = ["proceed", "hold", "reject"]
 VALID_PLATFORMS = ["google_meet", "zoom", "teams", "in_person"]
+VALID_PARTICIPANT_ROLES = ["lead", "co_interviewer", "observer"]
 
 class ParticipantIn(BaseModel):
     user_id: UUID
     role: Optional[str] = "co_interviewer"
+
+class PanelMemberOut(BaseModel):
+    user_id: UUID
+    name: str
+    role: str
+    outcome: Optional[str] = None  # this interviewer's final feedback outcome, if any
 
 class InterviewCreate(BaseModel):
     candidate_id: UUID
@@ -50,7 +57,7 @@ class InterviewWithNames(BaseModel):
     end_time: datetime
     meeting_platform: Optional[str]
     meeting_link: Optional[str]
-    panel: List[str] = []
+    panel: List[PanelMemberOut] = []
 
 class RescheduleRequest(BaseModel):
     start_time: datetime

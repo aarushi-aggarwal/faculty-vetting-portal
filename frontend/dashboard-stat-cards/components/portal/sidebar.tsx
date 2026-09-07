@@ -5,8 +5,6 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   Users2,
-  ClipboardList,
-  ClipboardCheck,
   CalendarDays,
   Settings,
   Inbox,
@@ -34,11 +32,10 @@ const teacherItems: NavItem[] = [
 ]
 
 // Admin capabilities stack on top of the teacher base rather than replacing it.
+// Assigning and confirming decisions both happen from the Candidates panel now.
 const adminItems: NavItem[] = [
-  { label: "Candidates",   href: "/candidates",   icon: Users2 },
-  { label: "Assignments",  href: "/assignments",  icon: ClipboardList },
-  { label: "Reviews",      href: "/reviews",       icon: ClipboardCheck },
-  { label: "Interviews",   href: "/interviews",    icon: CalendarDays },
+  { label: "Candidates", href: "/candidates", icon: Users2 },
+  { label: "Interviews", href: "/interviews", icon: CalendarDays },
 ]
 
 const usersItem: NavItem = { label: "Users", href: "/users", icon: GraduationCap }

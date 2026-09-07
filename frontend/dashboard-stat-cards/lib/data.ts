@@ -45,6 +45,29 @@ export interface Candidate {
   uploadedOn: string
 }
 
+/** One row of the admin Candidates table — the backend derives assignedTo/actionNeeded. */
+export interface CandidateBoardRow {
+  id: string
+  name: string
+  email: string
+  subject: string
+  experienceYears: number
+  status: CvStatus
+  assignedTo: string[]
+  actionNeeded: string
+  actionHighlight: boolean
+  updatedAt: string
+  createdAt: string
+}
+
+export interface CandidateHistoryEntry {
+  fromStatus: string | null
+  toStatus: string
+  changedByName: string | null
+  reason: string | null
+  changedAt: string
+}
+
 export interface WorkloadRow {
   teacherId: string
   teacher: string
@@ -71,11 +94,11 @@ export interface PortalUser {
 /** A teacher's call on a scanned CV. */
 export type Verdict = "shortlist" | "reject"
 
-/** What an admin did with that call. Overriding inverts the outcome. */
-export type AdminAction = "accepted" | "overridden"
+/** What an admin did with that call. Reverting inverts the outcome; reassigning sends it to another teacher. */
+export type AdminAction = "accepted" | "overridden" | "reassigned"
 
 /** Where the candidate lands once the admin has acted. */
-export type DecisionOutcome = "interview" | "archive"
+export type DecisionOutcome = "interview" | "archive" | "reassigned"
 
 export interface Assignment {
   id: string
@@ -107,17 +130,30 @@ export interface PendingReview {
   submittedOn: string
 }
 
+export type ParticipantRole = "lead" | "co_interviewer" | "observer"
+export type InterviewOutcome = "proceed" | "hold" | "reject"
+
+export interface PanelMember {
+  userId: string
+  name: string
+  role: ParticipantRole
+  outcome?: InterviewOutcome | null
+}
+
 export interface Interview {
   id: string
+  candidateId?: string
   candidate: string
   candidateEmail?: string
-  round?: number
+  round: number
   status: InterviewStatus
   date: string
   time: string
+  /** Raw ISO start time — kept alongside the formatted date/time for accurate sorting. */
+  startTime: string
   location?: string
-  platform?: string
-  interviewers?: { name: string; role: "Lead" | "Co-interviewer" | "Observer" }[]
+  meetingLink?: string | null
+  panel: PanelMember[]
 }
 
 /** The stages the candidate pipeline is charted by — counts come from the API. */

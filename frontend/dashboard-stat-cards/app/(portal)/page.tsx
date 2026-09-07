@@ -6,13 +6,14 @@ import {
 } from "lucide-react"
 import { Topbar } from "@/components/portal/topbar"
 import { Avatar, Card, SectionCard, VerdictBadge } from "@/components/portal/ui"
+import { SortableTeacherAssignmentsTable } from "@/components/portal/teacher-assignments-table"
 import { VIEW_ROLE_COOKIE, primaryRole, viewableRoles } from "@/lib/roles"
 import { cn } from "@/lib/utils"
-import { pipelineBarColor, roleConfig } from "@/lib/badges"
+import { pipelineBarColor } from "@/lib/badges"
 import type { RoleKey, PendingReview } from "@/lib/data"
 import {
   getAdminDashboardData, getTeacherWorkload, getMyAssignments, getMyInterviews,
-  getPendingReviews, getUsers,
+  getPendingReviews,
 } from "@/lib/fastapi-queries"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
@@ -126,9 +127,9 @@ function AdminOperationalBlock({
 }) {
   const cards: StatCard[] = [
     { label: "To Assign",         value: data.awaitingAssignment,   icon: Inbox,          tone: TONE.amber, href: "/candidates?status=pending_assignment" },
-    { label: "With Teachers",     value: data.outForReview,         icon: Search,         tone: TONE.steel, href: "/assignments" },
-    { label: "Awaiting Decision", value: data.awaitingDecision,     icon: ClipboardCheck, tone: TONE.amber, href: "/reviews" },
-    { label: "To Schedule",       value: data.shortlisted,          icon: CheckCircle2,   tone: TONE.green, href: "/interviews" },
+    { label: "With Teachers",     value: data.outForReview,         icon: Search,         tone: TONE.steel, href: "/candidates?status=assigned" },
+    { label: "Awaiting Decision", value: data.awaitingDecision,     icon: ClipboardCheck, tone: TONE.amber, href: "/candidates?actionRequired=1" },
+    { label: "To Schedule",       value: data.shortlisted,          icon: CheckCircle2,   tone: TONE.green, href: "/candidates?status=shortlisted" },
   ]
 
   return (
@@ -136,16 +137,16 @@ function AdminOperationalBlock({
       <StatCards cards={cards} />
 
       <SectionCard
-        title="Verdicts to confirm"
+        title="Decisions to confirm"
         action={
-          <Link href="/reviews" className="text-xs font-medium text-brand hover:underline">
+          <Link href="/candidates?actionRequired=1" className="text-xs font-medium text-brand hover:underline">
             View all
           </Link>
         }
       >
         {reviews.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-            Nothing waiting — teacher verdicts appear here once a CV has been scanned.
+            Nothing waiting — teacher decisions appear here once a CV has been scanned.
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -158,7 +159,7 @@ function AdminOperationalBlock({
                 </div>
                 <VerdictBadge verdict={r.verdict} />
                 <Link
-                  href="/reviews"
+                  href={`/candidates?open=${r.candidateId}&tab=reviews`}
                   className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
                 >
                   Confirm <ArrowRight className="size-3.5" />
@@ -179,7 +180,7 @@ function AdminOperationalBlock({
       >
         {data.readyForInterview.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-            Nothing cleared yet — candidates arrive here once you confirm a teacher's verdict.
+            Nothing cleared yet — candidates arrive here once you confirm a teacher's decision.
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -191,7 +192,7 @@ function AdminOperationalBlock({
                   <p className="text-xs text-muted-foreground">{c.subject} · {c.experienceYears} yrs</p>
                 </div>
                 <Link
-                  href={`/candidates/${c.id}`}
+                  href={`/candidates?open=${c.id}&tab=interviews`}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-muted"
                 >
                   <CalendarPlus className="size-3.5" /> Schedule interviews
@@ -208,18 +209,11 @@ function AdminOperationalBlock({
 // ── Master admin: everything Admin L2 has, plus people/roles and oversight ─────
 
 async function MasterAdminDashboard() {
-  const [data, reviews, workload, users] = await Promise.all([
+  const [data, reviews, workload] = await Promise.all([
     getAdminDashboardData(),
     getPendingReviews(),
     getTeacherWorkload(),
-    getUsers(),
   ])
-
-  const roleCounts = {
-    master_admin: users.filter((u) => u.roles.includes("master_admin")).length,
-    admin_l2:     users.filter((u) => u.roles.includes("admin_l2")).length,
-    teacher:      users.filter((u) => u.roles.includes("teacher")).length,
-  }
 
   return (
     <>
@@ -227,59 +221,9 @@ async function MasterAdminDashboard() {
       <div className="space-y-6 p-6">
         <AdminOperationalBlock data={data} reviews={reviews} />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <SectionCard
-            title="Users & Roles"
-            action={
-              <Link href="/users" className="text-xs font-medium text-brand hover:underline">
-                Manage
-              </Link>
-            }
-          >
-            <div className="grid grid-cols-3 gap-4 p-5">
-              {(["master_admin", "admin_l2", "teacher"] as const).map((r) => (
-                <Link key={r} href="/users" className="rounded-md border border-border p-4 text-center transition-colors hover:bg-muted/40">
-                  <p className="text-2xl font-bold tabular-nums">{roleCounts[r]}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{roleConfig[r].label}</p>
-                </Link>
-              ))}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Teacher Assignments">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-5 py-2.5 font-medium">Teacher</th>
-                    <th className="px-3 py-2.5 text-center font-medium">Assigned</th>
-                    <th className="px-3 py-2.5 text-center font-medium">Reviewed</th>
-                    <th className="px-3 py-2.5 text-center font-medium">Pending</th>
-                    <th className="px-5 py-2.5 text-center font-medium">Interviewed</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {workload.map((row) => (
-                    <tr key={row.teacherId} className="hover:bg-muted/40">
-                      <td className="px-5 py-3 font-medium">{row.teacher}</td>
-                      <td className="px-3 py-3 text-center tabular-nums">{row.assigned}</td>
-                      <td className="px-3 py-3 text-center tabular-nums text-[#2f5d40]">{row.reviewed}</td>
-                      <td className="px-3 py-3 text-center tabular-nums text-[#7a5c1e]">{row.pending}</td>
-                      <td className="px-5 py-3 text-center tabular-nums text-[#33506a]">{row.interviewed}</td>
-                    </tr>
-                  ))}
-                  {workload.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-5 py-10 text-center text-muted-foreground">
-                        No teachers on the portal yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </SectionCard>
-        </div>
+        <SectionCard title="Teacher Assignments">
+          <SortableTeacherAssignmentsTable rows={workload} />
+        </SectionCard>
 
         <CandidatePipeline stages={data.pipeline} total={data.totalCandidates} />
       </div>

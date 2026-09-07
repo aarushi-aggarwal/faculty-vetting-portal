@@ -1,7 +1,8 @@
 import { apiGet } from "@/lib/api-client"
 import type {
   Candidate, Assignment, Interview, PortalUser, WorkloadRow, Verdict, CvStatus,
-  AdminAction, DecisionOutcome, PendingReview,
+  AdminAction, DecisionOutcome, PendingReview, CandidateBoardRow, CandidateHistoryEntry,
+  PanelMember, ParticipantRole, InterviewOutcome,
 } from "@/lib/data"
 import { pipelineStages } from "@/lib/data"
 
@@ -61,6 +62,13 @@ interface ApiWorkloadRow {
   interviewed: number
 }
 
+interface ApiPanelMember {
+  user_id: string
+  name: string
+  role: string
+  outcome: string | null
+}
+
 interface ApiInterview {
   id: string
   candidate_id: string
@@ -72,7 +80,7 @@ interface ApiInterview {
   end_time: string
   meeting_platform: string | null
   meeting_link: string | null
-  panel: string[]
+  panel: ApiPanelMember[]
 }
 
 interface ApiUser {
@@ -81,6 +89,28 @@ interface ApiUser {
   full_name: string
   is_active: boolean
   roles: string[]
+}
+
+interface ApiCandidateBoardRow {
+  id: string
+  full_name: string
+  email: string
+  preferred_subject: string | null
+  years_experience: number | null
+  current_status: string
+  assigned_to: string[]
+  action_needed: string
+  action_highlight: boolean
+  updated_at: string
+  created_at: string
+}
+
+interface ApiCandidateHistoryEntry {
+  from_status: string | null
+  to_status: string
+  changed_by_name: string | null
+  reason: string | null
+  changed_at: string
 }
 
 // ---------- mappers ----------
@@ -133,10 +163,20 @@ function mapAssignment(a: ApiAssignment): Assignment {
   }
 }
 
+function mapPanelMember(p: ApiPanelMember): PanelMember {
+  return {
+    userId: p.user_id,
+    name: p.name,
+    role: (p.role as ParticipantRole) ?? "co_interviewer",
+    outcome: (p.outcome as InterviewOutcome) ?? null,
+  }
+}
+
 function mapInterview(i: ApiInterview): Interview {
   const start = new Date(i.start_time)
   return {
     id: i.id,
+    candidateId: i.candidate_id,
     candidate: i.candidate_name,
     candidateEmail: i.candidate_email,
     round: i.round_number,
@@ -147,9 +187,36 @@ function mapInterview(i: ApiInterview): Interview {
       year: "numeric",
     }),
     time: start.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+    startTime: i.start_time,
     location: i.meeting_platform ?? "Virtual",
-    platform: i.meeting_link ?? undefined,
-    interviewers: (i.panel ?? []).map((name) => ({ name, role: "Co-interviewer" as const })),
+    meetingLink: i.meeting_link,
+    panel: (i.panel ?? []).map(mapPanelMember),
+  }
+}
+
+function mapCandidateBoardRow(c: ApiCandidateBoardRow): CandidateBoardRow {
+  return {
+    id: c.id,
+    name: c.full_name,
+    email: c.email,
+    subject: c.preferred_subject ?? "N/A",
+    experienceYears: c.years_experience ?? 0,
+    status: c.current_status.toLowerCase() as CvStatus,
+    assignedTo: c.assigned_to,
+    actionNeeded: c.action_needed,
+    actionHighlight: c.action_highlight,
+    updatedAt: c.updated_at,
+    createdAt: c.created_at,
+  }
+}
+
+function mapCandidateHistoryEntry(h: ApiCandidateHistoryEntry): CandidateHistoryEntry {
+  return {
+    fromStatus: h.from_status,
+    toStatus: h.to_status,
+    changedByName: h.changed_by_name,
+    reason: h.reason,
+    changedAt: h.changed_at,
   }
 }
 
@@ -191,6 +258,28 @@ export async function getCandidateById(id: string): Promise<Candidate | null> {
   }
 }
 
+/** Everything the admin Candidates table needs, in one call. */
+export async function getCandidateBoard(): Promise<CandidateBoardRow[]> {
+  try {
+    const data = await apiGet<ApiCandidateBoardRow[]>("/candidates/board")
+    return data.map(mapCandidateBoardRow)
+  } catch (err) {
+    console.error("[api] getCandidateBoard error:", err)
+    return []
+  }
+}
+
+/** Full status-change timeline for one candidate, most recent first. */
+export async function getCandidateHistory(id: string): Promise<CandidateHistoryEntry[]> {
+  try {
+    const data = await apiGet<ApiCandidateHistoryEntry[]>(`/candidates/${id}/history`)
+    return data.map(mapCandidateHistoryEntry)
+  } catch (err) {
+    console.error("[api] getCandidateHistory error:", err)
+    return []
+  }
+}
+
 export async function getAssignments(): Promise<Assignment[]> {
   try {
     const data = await apiGet<ApiAssignment[]>("/assignments/")
@@ -217,6 +306,16 @@ export async function getInterviews(): Promise<Interview[]> {
     return data.map(mapInterview)
   } catch (err) {
     console.error("[api] getInterviews error:", err)
+    return []
+  }
+}
+
+export async function getInterviewsForCandidate(candidateId: string): Promise<Interview[]> {
+  try {
+    const data = await apiGet<ApiInterview[]>(`/interviews/candidate/${candidateId}`)
+    return data.map(mapInterview)
+  } catch (err) {
+    console.error("[api] getInterviewsForCandidate error:", err)
     return []
   }
 }

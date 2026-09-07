@@ -1,12 +1,14 @@
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import {
+  actionNeededClassName,
   adminActionConfig,
   assignmentStatusConfig,
   fallbackBadge,
   initials,
   interviewStatusConfig,
   outcomeConfig,
+  participantRoleConfig,
   priorityConfig,
   roleConfig,
   statusConfig,
@@ -63,6 +65,18 @@ export function AdminActionBadge({ action }: { action: string }) {
 
 export function OutcomeBadge({ verdict }: { verdict: string }) {
   return <Badge style={outcomeConfig[verdict]} fallbackLabel={verdict} />
+}
+
+export function ParticipantRoleBadge({ role }: { role: string }) {
+  return <Badge style={participantRoleConfig[role]} fallbackLabel={role} />
+}
+
+/** The Candidates table's "what happens next" chip. Amber when it needs the
+ * admin's attention now, gray once the candidate is closed out. */
+export function ActionNeededBadge({ label, highlight }: { label: string; highlight: boolean }) {
+  return (
+    <span className={cn(badgeBase, actionNeededClassName(label, highlight))}>{label}</span>
+  )
 }
 
 export function Avatar({
