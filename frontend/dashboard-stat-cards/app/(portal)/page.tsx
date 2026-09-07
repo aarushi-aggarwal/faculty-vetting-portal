@@ -6,7 +6,7 @@ import {
 } from "lucide-react"
 import { Topbar } from "@/components/portal/topbar"
 import { Avatar, Card, SectionCard, VerdictBadge } from "@/components/portal/ui"
-import { VIEW_ROLE_COOKIE, primaryRole, viewableRoles } from "@/components/portal/role-context"
+import { VIEW_ROLE_COOKIE, primaryRole, viewableRoles } from "@/lib/roles"
 import { cn } from "@/lib/utils"
 import { pipelineBarColor, roleConfig } from "@/lib/badges"
 import type { RoleKey, PendingReview } from "@/lib/data"

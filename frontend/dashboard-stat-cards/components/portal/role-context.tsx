@@ -3,14 +3,9 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import type { RoleKey } from "@/lib/data"
+import { VIEW_ROLE_COOKIE, primaryRole, viewableRoles } from "@/lib/roles"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
-
-/**
- * Which role the user is currently *viewing* the portal as. Server components read
- * the same cookie, so switching role changes server-rendered pages too.
- */
-export const VIEW_ROLE_COOKIE = "portal_view_role"
 
 export interface ActiveUser {
   name: string
@@ -37,24 +32,6 @@ const RoleContext = createContext<RoleContextValue | null>(null)
 function readCookie(name: string): string | undefined {
   if (typeof document === "undefined") return undefined
   return document.cookie.split("; ").find((c) => c.startsWith(`${name}=`))?.split("=")[1]
-}
-
-/** Highest privilege a user holds — their default view. */
-export function primaryRole(roles: RoleKey[]): RoleKey {
-  if (roles.includes("master_admin")) return "master_admin"
-  if (roles.includes("admin_l2")) return "admin_l2"
-  return "teacher"
-}
-
-/**
- * Dashboards a user may switch between. A master admin outranks admin_l2, so they
- * can preview that dashboard too even though the role isn't separately granted to
- * them — everyone below teacher is still gated on actually holding the role.
- */
-export function viewableRoles(roles: RoleKey[]): RoleKey[] {
-  if (roles.includes("master_admin")) return ["master_admin", "admin_l2", "teacher"]
-  if (roles.includes("admin_l2")) return ["admin_l2", "teacher"]
-  return ["teacher"]
 }
 
 export function RoleProvider({ children }: { children: ReactNode }) {

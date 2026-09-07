@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
-import { useRole, viewableRoles } from "@/components/portal/role-context"
+import { useRole } from "@/components/portal/role-context"
+import { viewableRoles } from "@/lib/roles"
 import type { RoleKey } from "@/lib/data"
 
 const roleLabel: Record<RoleKey, string> = {
