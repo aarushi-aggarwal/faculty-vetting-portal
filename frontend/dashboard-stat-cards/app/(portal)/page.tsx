@@ -1,25 +1,26 @@
 import Link from "next/link"
 import { cookies } from "next/headers"
 import {
-  FileText, Inbox, Search, CheckCircle2, CalendarClock, ClipboardCheck,
+  Inbox, Search, CheckCircle2, CalendarClock, ClipboardCheck,
   CalendarPlus, ArrowRight, type LucideIcon,
 } from "lucide-react"
 import { Topbar } from "@/components/portal/topbar"
-import { Avatar, Card, SectionCard } from "@/components/portal/ui"
-import { FlowStrip } from "@/components/portal/flow-strip"
-import { VIEW_ROLE_COOKIE, primaryRole } from "@/components/portal/role-context"
+import { Avatar, Card, SectionCard, VerdictBadge } from "@/components/portal/ui"
+import { VIEW_ROLE_COOKIE, primaryRole, viewableRoles } from "@/components/portal/role-context"
 import { cn } from "@/lib/utils"
-import { pipelineBarColor } from "@/lib/badges"
-import type { RoleKey } from "@/lib/data"
+import { pipelineBarColor, roleConfig } from "@/lib/badges"
+import type { RoleKey, PendingReview } from "@/lib/data"
 import {
   getAdminDashboardData, getTeacherWorkload, getMyAssignments, getMyInterviews,
+  getPendingReviews, getUsers,
 } from "@/lib/fastapi-queries"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1"
 
 /**
  * Which dashboard to render. Honours the topbar "viewing as" switcher, but only
- * for roles the user genuinely holds — the cookie is never trusted on its own.
+ * for a dashboard the user is actually entitled to see — the cookie is never
+ * trusted on its own.
  */
 async function resolveViewRole(token: string, requested?: string): Promise<RoleKey> {
   try {
@@ -31,7 +32,8 @@ async function resolveViewRole(token: string, requested?: string): Promise<RoleK
     const data = await res.json()
     const roles: RoleKey[] = (data.roles ?? []).map((r: any) => r.name as RoleKey)
 
-    if (requested && roles.includes(requested as RoleKey)) return requested as RoleKey
+    const allowed = viewableRoles(roles)
+    if (requested && allowed.includes(requested as RoleKey)) return requested as RoleKey
     return primaryRole(roles)
   } catch {
     return "teacher"
@@ -111,30 +113,138 @@ function CandidatePipeline({
   )
 }
 
-// ── Master admin: overall pipeline + teacher assignments ───────────────────────
+// ── Shared by both admin dashboards: the day-to-day work queues ────────────────
+// Kept as one component so Master Admin and Admin L2 cannot drift apart again —
+// every admin can do this work, regardless of level.
+
+function AdminOperationalBlock({
+  data,
+  reviews,
+}: {
+  data: Awaited<ReturnType<typeof getAdminDashboardData>>
+  reviews: PendingReview[]
+}) {
+  const cards: StatCard[] = [
+    { label: "To Assign",         value: data.awaitingAssignment,   icon: Inbox,          tone: TONE.amber, href: "/candidates?status=pending_assignment" },
+    { label: "With Teachers",     value: data.outForReview,         icon: Search,         tone: TONE.steel, href: "/assignments" },
+    { label: "Awaiting Decision", value: data.awaitingDecision,     icon: ClipboardCheck, tone: TONE.amber, href: "/reviews" },
+    { label: "To Schedule",       value: data.shortlisted,          icon: CheckCircle2,   tone: TONE.green, href: "/interviews" },
+  ]
+
+  return (
+    <>
+      <StatCards cards={cards} />
+
+      <SectionCard
+        title="Verdicts to confirm"
+        action={
+          <Link href="/reviews" className="text-xs font-medium text-brand hover:underline">
+            View all
+          </Link>
+        }
+      >
+        {reviews.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-muted-foreground">
+            Nothing waiting — teacher verdicts appear here once a CV has been scanned.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {reviews.slice(0, 6).map((r) => (
+              <li key={r.reviewId} className="flex items-center gap-3 px-5 py-3">
+                <Avatar name={r.candidate} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{r.candidate}</p>
+                  <p className="text-xs text-muted-foreground">by {r.teacher} · {r.subject}</p>
+                </div>
+                <VerdictBadge verdict={r.verdict} />
+                <Link
+                  href="/reviews"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline"
+                >
+                  Confirm <ArrowRight className="size-3.5" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Cleared for interview — ready to schedule"
+        action={
+          <Link href="/candidates?status=shortlisted" className="text-xs font-medium text-brand hover:underline">
+            View all
+          </Link>
+        }
+      >
+        {data.readyForInterview.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-muted-foreground">
+            Nothing cleared yet — candidates arrive here once you confirm a teacher's verdict.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {data.readyForInterview.slice(0, 8).map((c) => (
+              <li key={c.id} className="flex items-center gap-3 px-5 py-3">
+                <Avatar name={c.name} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{c.name}</p>
+                  <p className="text-xs text-muted-foreground">{c.subject} · {c.experienceYears} yrs</p>
+                </div>
+                <Link
+                  href={`/candidates/${c.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-muted"
+                >
+                  <CalendarPlus className="size-3.5" /> Schedule interviews
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
+    </>
+  )
+}
+
+// ── Master admin: everything Admin L2 has, plus people/roles and oversight ─────
 
 async function MasterAdminDashboard() {
-  const [data, workload] = await Promise.all([
+  const [data, reviews, workload, users] = await Promise.all([
     getAdminDashboardData(),
+    getPendingReviews(),
     getTeacherWorkload(),
+    getUsers(),
   ])
 
-  const cards: StatCard[] = [
-    { label: "Total Candidates",   value: data.totalCandidates,    icon: FileText,      tone: TONE.neutral, href: "/candidates" },
-    { label: "To Assign",          value: data.awaitingAssignment, icon: Inbox,         tone: TONE.amber,   href: "/candidates?status=pending_assignment" },
-    { label: "With Teachers",      value: data.outForReview,       icon: Search,        tone: TONE.steel,   href: "/assignments" },
-    { label: "Awaiting Decision",  value: data.awaitingDecision,   icon: ClipboardCheck,tone: TONE.amber,   href: "/reviews" },
-    { label: "Interviews Scheduled", value: data.interviewsScheduled, icon: CalendarClock, tone: TONE.steel, href: "/interviews" },
-  ]
+  const roleCounts = {
+    master_admin: users.filter((u) => u.roles.includes("master_admin")).length,
+    admin_l2:     users.filter((u) => u.roles.includes("admin_l2")).length,
+    teacher:      users.filter((u) => u.roles.includes("teacher")).length,
+  }
 
   return (
     <>
       <Topbar title="Dashboard" showDate />
       <div className="space-y-6 p-6">
-        <StatCards cards={cards} />
+        <AdminOperationalBlock data={data} reviews={reviews} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <CandidatePipeline stages={data.pipeline} total={data.totalCandidates} />
+          <SectionCard
+            title="Users & Roles"
+            action={
+              <Link href="/users" className="text-xs font-medium text-brand hover:underline">
+                Manage
+              </Link>
+            }
+          >
+            <div className="grid grid-cols-3 gap-4 p-5">
+              {(["master_admin", "admin_l2", "teacher"] as const).map((r) => (
+                <Link key={r} href="/users" className="rounded-md border border-border p-4 text-center transition-colors hover:bg-muted/40">
+                  <p className="text-2xl font-bold tabular-nums">{roleCounts[r]}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{roleConfig[r].label}</p>
+                </Link>
+              ))}
+            </div>
+          </SectionCard>
 
           <SectionCard title="Teacher Assignments">
             <div className="overflow-x-auto">
@@ -153,9 +263,9 @@ async function MasterAdminDashboard() {
                     <tr key={row.teacherId} className="hover:bg-muted/40">
                       <td className="px-5 py-3 font-medium">{row.teacher}</td>
                       <td className="px-3 py-3 text-center tabular-nums">{row.assigned}</td>
-                      <td className="px-3 py-3 text-center tabular-nums text-green-600">{row.reviewed}</td>
-                      <td className="px-3 py-3 text-center tabular-nums text-amber-600">{row.pending}</td>
-                      <td className="px-5 py-3 text-center tabular-nums text-indigo-600">{row.interviewed}</td>
+                      <td className="px-3 py-3 text-center tabular-nums text-[#2f5d40]">{row.reviewed}</td>
+                      <td className="px-3 py-3 text-center tabular-nums text-[#7a5c1e]">{row.pending}</td>
+                      <td className="px-5 py-3 text-center tabular-nums text-[#33506a]">{row.interviewed}</td>
                     </tr>
                   ))}
                   {workload.length === 0 && (
@@ -170,78 +280,23 @@ async function MasterAdminDashboard() {
             </div>
           </SectionCard>
         </div>
+
+        <CandidatePipeline stages={data.pipeline} total={data.totalCandidates} />
       </div>
     </>
   )
 }
 
-// ── Admin L2: assign CVs out, then put shortlisted candidates up for interview ─
+// ── Admin L2: the day-to-day work queues, nothing else ──────────────────────────
 
 async function AdminL2Dashboard() {
-  const data = await getAdminDashboardData()
-
-  const cards: StatCard[] = [
-    { label: "To Assign",         value: data.awaitingAssignment, icon: Inbox,         tone: TONE.amber, href: "/candidates?status=pending_assignment" },
-    { label: "With Teachers",     value: data.outForReview,       icon: Search,        tone: TONE.steel, href: "/assignments" },
-    { label: "Awaiting Decision", value: data.awaitingDecision,   icon: ClipboardCheck,tone: TONE.amber, href: "/reviews" },
-    { label: "To Schedule",       value: data.shortlisted,        icon: CheckCircle2,  tone: TONE.green, href: "/interviews" },
-  ]
+  const [data, reviews] = await Promise.all([getAdminDashboardData(), getPendingReviews()])
 
   return (
     <>
       <Topbar title="Dashboard" showDate />
       <div className="space-y-6 p-6">
-        <FlowStrip active="assign" />
-        <StatCards cards={cards} />
-
-        {data.awaitingDecision > 0 && (
-          <Link href="/reviews" className="block">
-            <Card className="flex items-center gap-3 border-l-4 border-l-[#b99b53] p-4 transition-shadow hover:shadow-md">
-              <ClipboardCheck className="size-5 shrink-0 text-[#7a5c1e]" />
-              <p className="flex-1 text-sm">
-                <span className="font-semibold">{data.awaitingDecision}</span>{" "}
-                {data.awaitingDecision === 1 ? "teacher verdict is" : "teacher verdicts are"} waiting
-                for you to accept or override.
-              </p>
-              <ArrowRight className="size-4 text-muted-foreground" />
-            </Card>
-          </Link>
-        )}
-
-        <SectionCard
-          title="Cleared for interview — ready to schedule"
-          action={
-            <Link href="/candidates?status=shortlisted" className="text-xs font-medium text-brand hover:underline">
-              View all
-            </Link>
-          }
-        >
-          {data.readyForInterview.length === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-              Nothing cleared yet — candidates arrive here once you confirm a teacher's verdict.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {data.readyForInterview.slice(0, 8).map((c) => (
-                <li key={c.id} className="flex items-center gap-3 px-5 py-3">
-                  <Avatar name={c.name} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">{c.subject} · {c.experienceYears} yrs</p>
-                  </div>
-                  <Link
-                    href={`/candidates/${c.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-muted"
-                  >
-                    <CalendarPlus className="size-3.5" /> Schedule interviews
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </SectionCard>
-
-        <CandidatePipeline stages={data.pipeline} total={data.totalCandidates} />
+        <AdminOperationalBlock data={data} reviews={reviews} />
       </div>
     </>
   )
@@ -269,7 +324,6 @@ async function TeacherDashboard() {
     <>
       <Topbar title="Dashboard" showDate />
       <div className="space-y-6 p-6">
-        <FlowStrip active="scan" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {cards.map((s) => {
             const Icon = s.icon

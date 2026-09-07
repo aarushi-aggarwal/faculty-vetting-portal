@@ -63,7 +63,7 @@ export const priorityConfig: Record<Priority, BadgeStyle> = {
 
 export const roleConfig: Record<RoleKey, BadgeStyle & { avatar: string }> = {
   master_admin: { label: "Master Admin", className: "bg-[#24292f] text-white ring-[#24292f]", avatar: "bg-[#24292f]" },
-  admin_l2:     { label: "Admin L2", className: "bg-[#3e5c76] text-white ring-[#3e5c76]", avatar: "bg-[#3e5c76]" },
+  admin_l2:     { label: "Admin Level 2", className: "bg-[#3e5c76] text-white ring-[#3e5c76]", avatar: "bg-[#3e5c76]" },
   teacher:      { label: "Teacher", className: NEUTRAL, avatar: "bg-slate-500" },
 }
 

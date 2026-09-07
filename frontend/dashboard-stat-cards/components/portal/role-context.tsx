@@ -46,6 +46,17 @@ export function primaryRole(roles: RoleKey[]): RoleKey {
   return "teacher"
 }
 
+/**
+ * Dashboards a user may switch between. A master admin outranks admin_l2, so they
+ * can preview that dashboard too even though the role isn't separately granted to
+ * them — everyone below teacher is still gated on actually holding the role.
+ */
+export function viewableRoles(roles: RoleKey[]): RoleKey[] {
+  if (roles.includes("master_admin")) return ["master_admin", "admin_l2", "teacher"]
+  if (roles.includes("admin_l2")) return ["admin_l2", "teacher"]
+  return ["teacher"]
+}
+
 export function RoleProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const [user, setUser] = useState<ActiveUser>(defaultUser)
@@ -66,9 +77,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
           department: "",
         })
 
-        // Restore the chosen view, but only if the user actually holds that role.
+        // Restore the chosen view, but only if it's one this user can legitimately see.
         const saved = readCookie(VIEW_ROLE_COOKIE) as RoleKey | undefined
-        setRoleState(saved && roles.includes(saved) ? saved : primaryRole(roles))
+        const allowed = viewableRoles(roles)
+        setRoleState(saved && allowed.includes(saved) ? saved : primaryRole(roles))
       })
       .catch(() => {
         document.cookie = "portal_token=; path=/; max-age=0"

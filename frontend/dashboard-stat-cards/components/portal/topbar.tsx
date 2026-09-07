@@ -2,14 +2,14 @@
 
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
-import { useRole } from "@/components/portal/role-context"
+import { useRole, viewableRoles } from "@/components/portal/role-context"
 import type { RoleKey } from "@/lib/data"
 
-const roleOptions: { key: RoleKey; label: string }[] = [
-  { key: "master_admin", label: "Master Admin" },
-  { key: "admin_l2",     label: "Admin L2" },
-  { key: "teacher",      label: "Teacher" },
-]
+const roleLabel: Record<RoleKey, string> = {
+  master_admin: "Master Admin",
+  admin_l2:     "Admin Level 2",
+  teacher:      "Teacher",
+}
 
 export function Topbar({
   title,
@@ -24,8 +24,8 @@ export function Topbar({
 }) {
   const { role, setRole, user } = useRole()
 
-  // Anyone holding more than one role can switch between those views.
-  const availableRoles = roleOptions.filter((o) => user.roles.includes(o.key))
+  // Anyone who can view more than one dashboard gets the switcher.
+  const availableRoles = viewableRoles(user.roles)
   const showSwitcher = availableRoles.length > 1
 
   const today = new Date().toLocaleDateString("en-US", {
@@ -48,19 +48,19 @@ export function Topbar({
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Viewing as</span>
             <div className="flex items-center rounded-md border border-border bg-muted/50 p-0.5">
-              {availableRoles.map((opt) => (
+              {availableRoles.map((key) => (
                 <button
-                  key={opt.key}
+                  key={key}
                   type="button"
-                  onClick={() => setRole(opt.key)}
+                  onClick={() => setRole(key)}
                   className={cn(
                     "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                    role === opt.key
+                    role === key
                       ? "bg-card text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {opt.label}
+                  {roleLabel[key]}
                 </button>
               ))}
             </div>
